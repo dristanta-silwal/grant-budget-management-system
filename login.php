@@ -27,6 +27,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 
+<header style="background-color: #ffffff; color: #333; margin: 1rem; padding: 1rem; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); width: 95%; text-align: center;">
+    <h1 style="font-size: 1.6rem; color: #4a90e2; margin-bottom: 1rem;">Grant Budget Management System</h1>
+    <nav style="display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap; padding: 0.5rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <a href="index.php" style="text-decoration: none; color: #4a90e2; padding: 0.5rem 1rem; border-radius: 5px; font-weight: bold; background-color: #e6f0fa; transition: background-color 0.3s ease;">Docs</a>
+        </div>
+    </nav>
+</header>
+
 <h1 style="text-align: center; font-family: Arial, sans-serif;">Login</h1>
 <div style="max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
     <form action="login.php" method="POST" style="display: flex; flex-direction: column; gap: 15px;">
@@ -43,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <a href="forget_password.php" style="display: block; font-size: 14px; color: #3498db; text-decoration: none; margin-bottom: 10px;">
             Forget Password?
         </a>
-        
+
         <p style="color: #333; font-size: 14px;">Don't have an account?</p>
         <a href="register.php" style="display: inline-block; padding: 10px 20px; background-color: #2ecc71; color: white; border-radius: 5px; text-decoration: none; font-size: 16px;">Register</a>
     </div>
