@@ -56,8 +56,7 @@ if ($user_id) {
                 <a href="index.php"
                     style="text-decoration: none; color: #4a90e2; padding: 0.5rem 1rem; border-radius: 5px; font-weight: bold; background-color: #e6f0fa; transition: background-color 0.3s ease;">Home</a>
                 <a href="create_grant.php"
-                    style="text-decoration: none; color: #4a90e2; padding: 0.5rem 1rem; border-radius: 5px; font-weight: bold; background-color: #e6f0fa; transition: background-color 0.3s ease;">CreateNew
-                    Grant</a>
+                    style="text-decoration: none; color: #4a90e2; padding: 0.5rem 1rem; border-radius: 5px; font-weight: bold; background-color: #e6f0fa; transition: background-color 0.3s ease;">Create New Grant</a>
                 <a href="logout.php"
                     style="text-decoration: none; color: #4a90e2; padding: 0.5rem 1rem; border-radius: 5px; font-weight: bold; background-color: #e6f0fa; transition: background-color 0.3s ease;">Logout</a>
                 <?php if ($user_id == 1): ?>

@@ -12,6 +12,25 @@ if (!$grant_id) {
     die("Invalid grant ID.");
 }
 
+if (isset($_GET['update'])) {
+    $item_id = filter_input(INPUT_GET, 'update', FILTER_VALIDATE_INT);
+    $year_column = filter_input(INPUT_POST, 'year_column', FILTER_SANITIZE_STRING);
+    $year_value = filter_input(INPUT_POST, 'year_value', FILTER_VALIDATE_FLOAT);
+
+    if ($item_id && $year_column && $year_value !== false) {
+        // Ensure the year_column matches the expected format
+        if (preg_match('/^year_\d+$/', $year_column)) {
+            $stmt = $conn->prepare("UPDATE budget_items SET $year_column = ? WHERE id = ? AND grant_id = ?");
+            $stmt->bind_param("dii", $year_value, $item_id, $grant_id);
+            $stmt->execute();
+            $stmt->close();
+            header("Location: add_budget.php?grant_id=$grant_id&updated=1");
+            exit();
+        }
+    }
+}
+
+
 if (isset($_GET['delete'])) {
     $item_id = filter_input(INPUT_GET, 'delete', FILTER_VALIDATE_INT);
     if ($item_id) {
@@ -154,19 +173,24 @@ $items = $conn->query("SELECT * FROM budget_items WHERE grant_id = $grant_id");
         <?php for ($year = 1; $year <= $years; $year++): ?>
             <th style="border: 1px solid #ddd; padding: 12px; font-weight: bold;">Year <?php echo $year; ?></th>
         <?php endfor; ?>
-        <th style="border: 1px solid #ddd; padding: 12px; font-weight: bold;">Total Amount</th>
         <th style="border: 1px solid #ddd; padding: 12px; font-weight: bold;">Action</th>
     </tr>
     <?php while ($item = $items->fetch_assoc()): ?>
-        <tr>
-            <td style="border: 1px solid #ddd; padding: 12px;"><?php echo htmlspecialchars($item['description']); ?></td>
-            <?php for ($year = 1; $year <= $years; $year++): ?>
-                <td style="border: 1px solid #ddd; padding: 12px;"><?php echo number_format($item["year_$year"], 2); ?></td>
-            <?php endfor; ?>
-            <td style="border: 1px solid #ddd; padding: 12px;"><?php echo number_format($item['amount'], 2); ?></td>
-            <td style="border: 1px solid #ddd; padding: 12px;"><a href="add_budget.php?grant_id=<?php echo $grant_id; ?>&delete=<?php echo $item['id']; ?>" onclick="return confirm('Are you sure you want to delete this item?');" style="color: #f44336; text-decoration: none; font-weight: bold;">Delete</a></td>
-        </tr>
-    <?php endwhile; ?>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 12px;"><?php echo htmlspecialchars($item['description']); ?></td>
+        <?php for ($year = 1; $year <= $years; $year++): ?>
+            <td style="border: 1px solid #ddd; padding: 12px;">
+                <form action="add_budget.php?grant_id=<?php echo $grant_id; ?>&update=<?php echo $item['id']; ?>" method="POST" style="margin: 0; display: flex;">
+                    <input type="hidden" name="year_column" value="year_<?php echo $year; ?>">
+                    <input type="number" step="0.01" name="year_value" value="<?php echo number_format($item["year_$year"], 2); ?>" style="width: 60px; padding: 5px;">
+                    <button type="submit" style="background-color: #4CAF50; color: white; border: none; padding: 5px 10px; cursor: pointer;">Update</button>
+                </form>
+            </td>
+        <?php endfor; ?>
+        <td style="border: 1px solid #ddd; padding: 12px;"><a href="add_budget.php?grant_id=<?php echo $grant_id; ?>&delete=<?php echo $item['id']; ?>" onclick="return confirm('Are you sure you want to delete this item?');" style="color: #f44336; text-decoration: none; font-weight: bold;">Delete</a></td>
+    </tr>
+<?php endwhile; ?>
+
 </table>
 
 <script>

@@ -67,9 +67,7 @@ $categoryStyle = [
     'font' => ['bold' => true],
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'f2f2f2']]
 ];
-$cellStyle = [
-    
-];
+$cellStyle = [];
 
 $sheet->setCellValue('A1', 'Grant Title')->setCellValue('B1', $grant['title']);
 $sheet->mergeCells("B1:D1");
@@ -130,23 +128,25 @@ while ($category = $categories->fetch_assoc()) {
                 $rate_query->fetch();
                 $rate_query->close();
 
-                if ($year == 1) { 
+                if ($year == 1) {
                     $sheet->setCellValue("B$row", $hourly_rate_value);
                 }
-                
+
                 $amount_for_year = $yearly_amounts[$year - 1] * $hourly_rate_value;
                 $sheet->setCellValueByColumnAndRow($year + 2, $row, $amount_for_year);
-                $total += $amount_for_year;
+                // $total += $amount_for_year;
             }
         } else {
             for ($year = 1; $year <= $duration; $year++) {
                 $sheet->setCellValueByColumnAndRow($year + 2, $row, $yearly_amounts[$year - 1]);
-                $total += $yearly_amounts[$year - 1];
+                // $total += $yearly_amounts[$year - 1];
             }
         }
 
+        $total_formula = "=SUM(" . chr(67) . "{$row}:" . chr(66 + $duration) . "{$row})";
+        $sheet->setCellValueByColumnAndRow($duration + 3, $row, $total_formula);
+
         $sheet->setCellValue("A$row", $description);
-        $sheet->setCellValueByColumnAndRow($duration + 3, $row, $total);
         $sheet->getStyle("A$row:" . chr(66 + $duration + 1) . "$row")->applyFromArray($cellStyle);
         $row++;
     }
@@ -189,16 +189,17 @@ foreach ($fringe_roles as $fringe_role => $salary_roles) {
         if ($year == 1) {
             $sheet->setCellValue("B$row", $fringe_rate . '%');
         }
-        $fringe_formula = "=($salary_total_formula) * " . ($fringe_rate / 100);
 
-        $sheet->setCellValueByColumnAndRow($year + 2, $row, $fringe_formula);
+        $formula = "=SUM(" . chr(65 + $year + 1) . ($row - 5) . ":" . chr(65 + $year + 1) . ($row - 1) . ")";
+        $sheet->setCellValue(chr(65 + $year + 1) . $row, $formula);
     }
 
-    $total_formula = "=SUM(" . chr(66) . "{$row}:" . chr(66 + 1) . chr(66 + 1) . "{$row})";
+    $total_formula = "=SUM(" . chr(67) . "{$row}:" . chr(66 + $duration) . "{$row})";
     $sheet->setCellValueByColumnAndRow($duration + 3, $row, $total_formula);
 
     $row++;
 }
+
 $row++;
 
 $categories = $conn->query("SELECT * FROM budget_categories WHERE category_name NOT IN ('Personnel Compensation', 'Other Personnel') ORDER BY id");
@@ -232,17 +233,18 @@ while ($category = $categories->fetch_assoc()) {
 
                 $amount_for_year = $yearly_amounts[$year - 1] * $hourly_rate_value;
                 $sheet->setCellValueByColumnAndRow($year + 2, $row, $amount_for_year);
-                $total += $amount_for_year;
+                // $total += $amount_for_year;
             }
         } else {
             for ($year = 1; $year <= $duration; $year++) {
                 $sheet->setCellValueByColumnAndRow($year + 2, $row, $yearly_amounts[$year - 1]);
-                $total += $yearly_amounts[$year - 1];
+                // $total += $yearly_amounts[$year - 1];
             }
         }
 
         $sheet->setCellValue("A$row", $description);
-        $sheet->setCellValueByColumnAndRow($duration + 3, $row, $total);
+        $total_formula = "=SUM(" . chr(67) . "{$row}:" . chr(66 + $duration) . "{$row})";
+        $sheet->setCellValueByColumnAndRow($duration + 3, $row, $total_formula);
         $sheet->getStyle("A$row:" . chr(66 + $duration + 1) . "$row")->applyFromArray($cellStyle);
         $row++;
     }
@@ -257,6 +259,7 @@ for ($year = 1; $year <= $duration + 1; $year++) {
     $sheet->setCellValue($column . $row, $formula);
 }
 $row++;
+
 
 $sheet->setCellValue("A$row", "Indirect Costs");
 $sheet->setCellValue("B$row", "50.0%");

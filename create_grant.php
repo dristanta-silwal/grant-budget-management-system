@@ -34,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute();
         $grant_id = $stmt->insert_id;
 
+
         $stmtGrantUser = $conn->prepare("INSERT INTO grant_users (grant_id, user_id, role, status) VALUES (?, ?, ?, 'accepted')");
         if (!$stmtGrantUser) {
             throw new Exception("Error preparing statement for inserting grant user (creator): " . $conn->error);
@@ -41,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $creator_role = 'PI';
         $stmtGrantUser->bind_param('iis', $grant_id, $user_id, $creator_role);
         $stmtGrantUser->execute();
+
 
         foreach ($selected_user_ids as $index => $selected_user_id) {
             $role = $selected_roles[$index];
@@ -64,6 +66,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+
+        $defaultDescription = 'Initial Budget Item';
+        $defaultHourlyRate = 0.0;
+        $defaultYears = array_fill(1, 6, 0.0);
+        $defaultTotalAmount = 0.0;
+
+        $stmtBudget = $conn->prepare("INSERT INTO budget_items (grant_id, category_id, description, hourly_rate, year_1, year_2, year_3, year_4, year_5, year_6, amount) 
+                                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        if (!$stmtBudget) {
+            throw new Exception("Error preparing statement for inserting default budget item: " . $conn->error);
+        }
+
+        for ($i = 1; $i <= 8; $i++) {
+            if ($i === 3) {
+                continue;
+            }
+            $itemCount = 1;
+            if ($i === 1) {
+                $itemCount = 2;
+            } elseif ($i === 2) {
+                $itemCount = 3;
+            }
+        
+            for ($j = 1; $j <= $itemCount; $j++) {
+                switch ($i) {
+                    case 1:
+                        $defaultDescription = ($j === 1) ? "PI" : "Co-PI";
+                        break;
+                    case 2:
+                        if ($j === 1) {
+                            $defaultDescription = "UI professional staff & Post Docs";
+                        } elseif ($j === 2) {
+                            $defaultDescription = "GRAs/UGrads";
+                        } elseif ($j === 3) {
+                            $defaultDescription = "Temp Help";
+                        }
+                        break;
+                    case 4:
+                        $defaultDescription = "Large Servers";
+                        break;
+                    case 5:
+                        $defaultDescription = "Domestic Travel";
+                        break;
+                    case 6:
+                        $defaultDescription = "Materials and Supplies";
+                        break;
+                    case 7:
+                        $defaultDescription = "Grant of Idaho State University";
+                        break;
+                    case 8:
+                        $defaultDescription = "Back Out GRA T&F";
+                        break;
+                    default:
+                        $defaultDescription = "Initial Budget Item $i";
+                        break;
+                }
+        
+                $stmtBudget->bind_param(
+                    'iissddddddd',
+                    $grant_id,
+                    $i,
+                    $defaultDescription,
+                    $defaultHourlyRate,
+                    $defaultYears[1],
+                    $defaultYears[2],
+                    $defaultYears[3],
+                    $defaultYears[4],
+                    $defaultYears[5],
+                    $defaultYears[6],
+                    $defaultTotalAmount
+                );
+                $stmtBudget->execute();
+            }
+        }
+        
+        
+
         $conn->commit();
         header("Location: index.php");
     } catch (Exception $e) {
@@ -71,6 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo "<p style='color: red;'>Error: " . $e->getMessage() . "</p>";
     }
 }
+
 ?>
 
 <h1 style="font-family: Arial, sans-serif; text-align: center; color: #333; margin-top: 20px; font-size: 2em;">Create
@@ -118,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </form>
 
 <script>
-    document.getElementById('user_search').addEventListener('input', function () {
+    document.getElementById('user_search').addEventListener('input', function() {
         const query = this.value;
 
         if (query.length > 1) {
