@@ -116,6 +116,7 @@ $items = $conn->query("SELECT * FROM budget_items WHERE grant_id = $grant_id");
 ?>
 
 <h1 style="font-family: Arial, sans-serif; text-align: center; color: #333; font-size: 1.8em; margin-top: 20px;">Add Budget for <?php echo htmlspecialchars($title); ?></h1>
+<p style="font-family: Arial, sans-serif; text-align: center; color: #333; margin-top: 20px;">You can either delete all the rows and start fresh or update each cell individually, though that can be a tedious process.</p>
 
 <form action="add_budget.php?grant_id=<?php echo $grant_id; ?>" method="POST" style="width: 100%; max-width: 500px; margin: auto; font-family: Arial, sans-serif; font-size: 1em; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px;">
     <label style="display: block; margin-bottom: 5px; font-weight: bold;">Category:</label>
