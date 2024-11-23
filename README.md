@@ -41,17 +41,90 @@ Access the live application [here](https://gbms-v2-2a5c07812841.herokuapp.com/lo
 
 ## Database Schema
 
-### Users Table
-Stores user information for authentication and role assignments.
+### **Users Table**
+The **Users** table serves as the backbone of the system, storing critical user data for authentication and role management. Each user has attributes like:
+- **Unique username and email** for login and identification.
+- **Organization affiliation**, which can help manage grants across multiple institutions.
+- Integration with other tables ensures seamless role assignment (e.g., PI, Co-PI, or viewer) for various grants through the `grant_users` table.
 
-### Grants Table
-Stores information about grants.
+This table highlights how the system supports a multi-user environment for collaborative grant management.
 
-### Budget Items Table
-Tracks budgeting details for grants.
+---
 
-### Budget Categories Table
-Defines categories for budget items.
+### **Grants Table**
+The **Grants** table captures vital information about grants, making it a central hub for managing research projects. Key details include:
+- **Funding agency information** (e.g., NSF, NIH) to identify the source of the grant.
+- **Duration and financial data** to manage long-term projects.
+- Direct relationships with users (through the `user_id`) and budget items ensure tight integration of administrative, financial, and operational data.
+
+This table showcases how the project accommodates comprehensive grant tracking.
+
+---
+
+### **Budget Items Table**
+The **Budget Items** table is a granular tracker of financial allocations within grants. Highlights include:
+- Tracking **multi-year budgets** across up to six years.
+- Attributes like **description, amount, and hourly rate**, ensuring precise financial records.
+- Relationships with the **Grants** and **Budget Categories** tables enable categorization and contextualization of spending.
+
+This table emphasizes the system's ability to handle complex financial data in detail.
+
+---
+
+### **Budget Categories Table**
+The **Budget Categories** table defines and enforces the structure of the budget. It provides:
+- **Predefined categories** (e.g., Personnel Compensation, Equipment, Travel) that align with funding agency requirements.
+- **Restrictions** to ensure compliance with grant rules, such as limits on equipment spending.
+
+This table simplifies grant budgeting by providing clear frameworks for categorization.
+
+---
+
+### **Fringe Rates Table**
+The **Fringe Rates** table is an auxiliary but important component for calculating personnel costs. It includes:
+- **Role-specific rates** (e.g., Faculty, GRAs) to standardize cost projections.
+- Multi-year rates to align with the duration of grants.
+
+This table demonstrates the system's ability to support accurate financial forecasting.
+
+---
+
+### **Grant Users Table**
+The **Grant Users** table links users to grants with specific roles (e.g., creator, PI, Co-PI, or viewer). Key attributes include:
+- **Role assignment**, which dictates user permissions.
+- **Status tracking** (e.g., pending, accepted, rejected) to manage collaboration.
+
+This table highlights the system's collaborative nature and robust access control mechanisms.
+
+---
+
+### **Notifications Table**
+The **Notifications** table adds a dynamic layer of communication, allowing users to:
+- Receive updates about their grants, such as invitations or role changes.
+- Track notification statuses (e.g., read or unread) for follow-up actions.
+
+This table enhances usability by keeping users informed about project developments.
+
+---
+
+### **Salaries Table**
+The **Salaries** table provides a standardized reference for personnel compensation. Key features include:
+- **Role-specific hourly rates** for budgeting personnel costs.
+- Multi-year data to handle grant durations effectively.
+
+This table supports transparent and consistent budgeting for human resources.
+
+---
+
+### **Key Highlights**
+- **Centralized Grant Management**: The `Grants` table connects users, budgets, and notifications, ensuring a streamlined workflow.
+- **Comprehensive Budget Tracking**: The combination of `Budget Items` and `Budget Categories` tables ensures that every dollar is categorized and tracked accurately.
+- **Collaborative Environment**: The `Grant Users` table enables multi-role assignments, allowing diverse teams to collaborate effectively.
+- **Dynamic and Scalable**: The modular design, with auxiliary tables like `Fringe Rates` and `Salaries`, ensures the system can adapt to complex funding requirements.
+
+
+### Here's my Entity-Relationship Model for this project:
+<img src="assets/gbms_ER_model.png" alt="" width="600">
 
 More details about database can be found in [grant_budget.sql](https://github.com/dristanta-silwal/grant-budget-management-system/blob/main/grant_budget.sql).
 
