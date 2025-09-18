@@ -1,15 +1,18 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require __DIR__ . '/../vendor/autoload.php';
 require __DIR__ . '/../src/db.php';
+
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
-
-ob_start();
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -79,19 +82,26 @@ $sheet->mergeCells("F5:G5");
 $sheet->getStyle('A1:A6')->applyFromArray($generalInfoStyle);
 $sheet->getStyle('B1:B6')->applyFromArray($cellStyle);
 
-// Header row setup
 $sheet->setCellValue('A7', 'Description');
-$sheet->mergeCells("A7:A8");
+$sheet->mergeCells('A7:A8');
 $sheet->setCellValue('B7', 'Hourly Rate');
-$sheet->mergeCells("B7:B8");
+$sheet->mergeCells('B7:B8');
+
 for ($year = 1; $year <= $duration; $year++) {
-    $sheet->mergeCells(chr(66 + $year) . "7:" . chr(66 + $year) . "8");
-    $sheet->setCellValue(Coordinate::stringFromColumnIndex($year + 2) . 7, "Y$year");
+    $colIdx = $year + 2;
+    $col = Coordinate::stringFromColumnIndex($colIdx);
+    $sheet->mergeCells($col . '7:' . $col . '8');
+    $sheet->setCellValue($col . '7', 'Y' . $year);
 }
-$sheet->setCellValue(Coordinate::stringFromColumnIndex($duration + 3) . 7, 'Total');
-$sheet->mergeCells("G7:G8");
-$sheet->getStyle("A7:" . chr(66 + $duration + 1) . "7")->applyFromArray($headerStyle);
-$sheet->getStyle("A8:" . chr(66 + $duration + 1) . "8")->applyFromArray($headerStyle);
+
+$totalColIdx = $duration + 3;
+$totalCol = Coordinate::stringFromColumnIndex($totalColIdx);
+$sheet->setCellValue($totalCol . '7', 'Total');
+$sheet->mergeCells($totalCol . '7:' . $totalCol . '8');
+
+$lastHeaderCol = $totalCol;
+$sheet->getStyle('A7:' . $lastHeaderCol . '7')->applyFromArray($headerStyle);
+$sheet->getStyle('A8:' . $lastHeaderCol . '8')->applyFromArray($headerStyle);
 
 $row = 9;
 $salary_rows = [];
@@ -99,8 +109,8 @@ $categoriesStmt = $pdo->query("SELECT * FROM budget_categories WHERE category_na
 
 while ($category = $categoriesStmt->fetch(PDO::FETCH_ASSOC)) {
     $sheet->setCellValue("A$row", $category['category_name']);
-    $sheet->mergeCells("A$row:" . chr(66 + $duration + 1) . "$row");
-    $sheet->getStyle("A$row:" . chr(66 + $duration + 1) . "$row")->applyFromArray($categoryStyle);
+    $sheet->mergeCells('A' . $row . ':' . $lastHeaderCol . $row);
+    $sheet->getStyle('A' . $row . ':' . $lastHeaderCol . $row)->applyFromArray($categoryStyle);
     $row++;
 
     $itemsStmt = $pdo->prepare("SELECT description, year_1, year_2, year_3, year_4, year_5, year_6 FROM budget_items WHERE grant_id = :gid AND category_id = :cid");
@@ -124,26 +134,28 @@ while ($category = $categoriesStmt->fetch(PDO::FETCH_ASSOC)) {
                     $sheet->setCellValue("B{$row}", $hourly_rate_value);
                 }
                 $amount_for_year = $yearly_amounts[$year - 1] * $hourly_rate_value;
-                $sheet->setCellValue(Coordinate::stringFromColumnIndex($year + 2) . $row, $amount_for_year);
+                $col = Coordinate::stringFromColumnIndex($year + 2);
+                $sheet->setCellValue($col . $row, $amount_for_year);
             }
         } else {
             for ($year = 1; $year <= $duration; $year++) {
-                $sheet->setCellValue(Coordinate::stringFromColumnIndex($year + 2) . $row, $yearly_amounts[$year - 1]);
+                $col = Coordinate::stringFromColumnIndex($year + 2);
+                $sheet->setCellValue($col . $row, $yearly_amounts[$year - 1]);
             }
         }
 
-        $total_formula = "=SUM(" . chr(67) . "{$row}:" . chr(66 + $duration) . "{$row})";
-        $sheet->setCellValue(Coordinate::stringFromColumnIndex($duration + 3) . $row, $total_formula);
+        $total_formula = "=SUM(" . Coordinate::stringFromColumnIndex(3) . "{$row}:" . Coordinate::stringFromColumnIndex($duration + 2) . "{$row})";
+        $sheet->setCellValue($totalCol . $row, $total_formula);
 
         $sheet->setCellValue("A{$row}", $description);
-        $sheet->getStyle("A{$row}:" . chr(66 + $duration + 1) . "{$row}")->applyFromArray($cellStyle);
+        $sheet->getStyle("A{$row}:" . $lastHeaderCol . "{$row}")->applyFromArray($cellStyle);
         $row++;
     }
     $row++;
 }
 
 $sheet->setCellValue("A$row", "Fringe")->getStyle("A$row")->applyFromArray($categoryStyle);
-$sheet->mergeCells("A$row:" . chr(66 + $duration + 1) . "$row");
+$sheet->mergeCells('A' . $row . ':' . $lastHeaderCol . $row);
 $row++;
 
 $fringe_roles = [
@@ -156,32 +168,31 @@ $fringe_roles = [
 $fringeRateStmt = $pdo->prepare("SELECT fringe_rate FROM fringe_rates WHERE role = :role AND year = :year");
 
 foreach ($fringe_roles as $fringe_role => $salary_roles) {
-    $sheet->setCellValue("A$row", $fringe_role);
+    $sheet->setCellValue('A' . $row, $fringe_role);
 
     for ($year = 1; $year <= $duration; $year++) {
-        $salary_total_formula = "";
-        foreach ($salary_roles as $role) {
-            if (isset($salary_rows[$role])) {
-                $salary_row = $salary_rows[$role];
-                $salary_column = chr(65 + $year + 1);
-                $salary_total_formula .= "{$salary_column}{$salary_row}+";
+        $yearCol = Coordinate::stringFromColumnIndex($year + 2);
+        $sumParts = [];
+        foreach ($salary_roles as $roleName) {
+            if (isset($salary_rows[$roleName])) {
+                $sumParts[] = $yearCol . $salary_rows[$roleName];
             }
         }
-        $salary_total_formula = rtrim($salary_total_formula, "+");
-
+        $salarySumExpr = $sumParts ? implode('+', $sumParts) : '0';
         $fringeRateStmt->execute([':role' => $fringe_role, ':year' => $year]);
         $fringe_rate = (float)($fringeRateStmt->fetchColumn() ?: 0);
 
-        if ($year == 1) {
-            $sheet->setCellValue("B{$row}", $fringe_rate . '%');
+        if ($year === 1) {
+            $sheet->setCellValue('B' . $row, $fringe_rate . '%');
         }
-
-        $formula = "=SUM(" . chr(65 + $year + 1) . ($row - 5) . ":" . chr(65 + $year + 1) . ($row - 1) . ")";
-        $sheet->setCellValue(chr(65 + $year + 1) . $row, $formula);
+        $formula = '=(' . $salarySumExpr . ')*' . ($fringe_rate / 100);
+        $sheet->setCellValue($yearCol . $row, $formula);
     }
 
-    $total_formula = "=SUM(" . chr(67) . "{$row}:" . chr(66 + $duration) . "{$row})";
-    $sheet->setCellValue(Coordinate::stringFromColumnIndex($duration + 3) . $row, $total_formula);
+    $firstYearCol = Coordinate::stringFromColumnIndex(3);
+    $lastYearCol  = Coordinate::stringFromColumnIndex($duration + 2);
+    $total_formula = '=SUM(' . $firstYearCol . $row . ':' . $lastYearCol . $row . ')';
+    $sheet->setCellValue($totalCol . $row, $total_formula);
 
     $row++;
 }
@@ -191,8 +202,8 @@ $row++;
 $categories2Stmt = $pdo->query("SELECT * FROM budget_categories WHERE category_name NOT IN ('Personnel Compensation', 'Other Personnel') ORDER BY id");
 while ($category = $categories2Stmt->fetch(PDO::FETCH_ASSOC)) {
     $sheet->setCellValue("A$row", $category['category_name']);
-    $sheet->mergeCells("A$row:" . chr(66 + $duration + 1) . "$row");
-    $sheet->getStyle("A$row:" . chr(66 + $duration + 1) . "$row")->applyFromArray($categoryStyle);
+    $sheet->mergeCells('A' . $row . ':' . $lastHeaderCol . $row);
+    $sheet->getStyle('A' . $row . ':' . $lastHeaderCol . $row)->applyFromArray($categoryStyle);
     $row++;
 
     $itemsStmt = $pdo->prepare("SELECT description, year_1, year_2, year_3, year_4, year_5, year_6 FROM budget_items WHERE grant_id = :gid AND category_id = :cid");
@@ -206,65 +217,79 @@ while ($category = $categories2Stmt->fetch(PDO::FETCH_ASSOC)) {
         ], 0, $duration);
 
         for ($year = 1; $year <= $duration; $year++) {
-            $sheet->setCellValue(Coordinate::stringFromColumnIndex($year + 2) . $row, $yearly_amounts[$year - 1]);
+            $col = Coordinate::stringFromColumnIndex($year + 2);
+            $sheet->setCellValue($col . $row, $yearly_amounts[$year - 1]);
         }
 
         $sheet->setCellValue("A$row", $description);
-        $total_formula = "=SUM(" . chr(67) . "{$row}:" . chr(66 + $duration) . "{$row})";
-        $sheet->setCellValue(Coordinate::stringFromColumnIndex($duration + 3) . $row, $total_formula);
-        $sheet->getStyle("A$row:" . chr(66 + $duration + 1) . "$row")->applyFromArray($cellStyle);
+        $total_formula = "=SUM(" . Coordinate::stringFromColumnIndex(3) . "{$row}:" . Coordinate::stringFromColumnIndex($duration + 2) . "{$row})";
+        $sheet->setCellValue($totalCol . $row, $total_formula);
+        $sheet->getStyle("A$row:" . $lastHeaderCol . "$row")->applyFromArray($cellStyle);
         $row++;
     }
     $row++;
 }
 
 
-$sheet->setCellValue("A$row", "Modified Total Direct Costs");
-for ($year = 1; $year <= $duration + 1; $year++) {
-    $column = chr(66 + $year);
-    $formula = "=SUM(" . $column . ($row - 5) . ":" . $column . ($row - 1) . ")";
-    $sheet->setCellValue($column . $row, $formula);
+$sheet->setCellValue('A' . $row, 'Modified Total Direct Costs');
+$firstDataRow = 9;
+for ($year = 1; $year <= $duration; $year++) {
+    $col = Coordinate::stringFromColumnIndex($year + 2);
+    $formula = '=SUM(' . $col . $firstDataRow . ':' . $col . ($row - 1) . ')';
+    $sheet->setCellValue($col . $row, $formula);
 }
+$firstYearCol = Coordinate::stringFromColumnIndex(3);
+$lastYearCol  = Coordinate::stringFromColumnIndex($duration + 2);
+$sheet->setCellValue($totalCol . $row, '=SUM(' . $firstYearCol . $row . ':' . $lastYearCol . $row . ')');
 $row++;
 
 
-$sheet->setCellValue("A$row", "Indirect Costs");
-$sheet->setCellValue("B$row", "50.0%");
-for ($year = 1; $year <= $duration + 1; $year++) {
-    $column = chr(66 + $year);
-    $formula = "=($column" . ($row - 1) . " * 0.5)";
-    $sheet->setCellValue($column . $row, $formula);
+$sheet->setCellValue('A' . $row, 'Indirect Costs');
+$sheet->setCellValue('B' . $row, '50.0%');
+for ($year = 1; $year <= $duration; $year++) {
+    $col = Coordinate::stringFromColumnIndex($year + 2);
+    $sheet->setCellValue($col . $row, '=' . $col . ($row - 1) . ' * 0.5');
 }
+$sheet->setCellValue($totalCol . $row, '=' . $totalCol . ($row - 1) . ' * 0.5');
 $row++;
 
-$sheet->setCellValue("A$row", "Total Project Cost");
-for ($year = 1; $year <= $duration + 1; $year++) {
-    $column = chr(66 + $year);
-    $formula = "=SUM($column" . (9) . ": $column" . ($row - 1) . ")";
-    $sheet->setCellValue($column . $row, $formula);
+$sheet->setCellValue('A' . $row, 'Total Project Cost');
+$firstDataRow = 9;
+for ($year = 1; $year <= $duration; $year++) {
+    $col = Coordinate::stringFromColumnIndex($year + 2);
+    $sheet->setCellValue($col . $row, '=SUM(' . $col . $firstDataRow . ':' . $col . ($row - 1) . ')');
 }
+$sheet->setCellValue($totalCol . $row, '=SUM(' . $totalCol . $firstDataRow . ':' . $totalCol . ($row - 1) . ')');
 $row++;
 
-
-$sheet->getStyle("A" . ($row - 3) . ":" . chr(66 + $duration + 1) . ($row - 1))->applyFromArray($categoryStyle);
+$sheet->getStyle('A' . ($row - 3) . ':' . $lastHeaderCol . ($row - 1))->applyFromArray($categoryStyle);
 
 
 $sheet->getColumnDimension('A')->setWidth(30);
 $sheet->getColumnDimension('B')->setWidth(20);
-foreach (range(1, 100) as $row) {
-    $sheet->getRowDimension($row)->setRowHeight(20);
+foreach (range(1, 100) as $ri) {
+    $sheet->getRowDimension($ri)->setRowHeight(20);
 }
 for ($year = 1; $year <= $duration; $year++) {
-    $sheet->getColumnDimension(chr(66 + $year))->setWidth(15);
+    $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($year + 2))->setWidth(15);
 }
 $sheet->getStyle($sheet->calculateWorksheetDimension())
     ->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
-ob_end_clean();
+if (function_exists('ob_get_level')) {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+}
+
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-header("Content-Disposition: attachment; filename=\"grant_budget_{$grant['title']}.xlsx\"");
+$safeTitle = preg_replace('/[^A-Za-z0-9 _.-]/', '_', $grant['title']);
+header('Content-Disposition: attachment; filename="grant_budget_' . $safeTitle . '.xlsx"');
 header('Cache-Control: max-age=0');
 
 $writer = new Xlsx($spreadsheet);
+if (method_exists($writer, 'setPreCalculateFormulas')) {
+    $writer->setPreCalculateFormulas(false);
+}
 $writer->save('php://output');
 exit;

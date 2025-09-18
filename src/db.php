@@ -6,7 +6,6 @@ use Dotenv\Dotenv;
 if (file_exists(__DIR__ . '/../.env')) {
     $dotenv = Dotenv::createImmutable(__DIR__ . '/..');
     $dotenv->load();
-    // Ensure DATABASE_URL is available via both $_ENV and $_SERVER
     if (isset($_ENV['DATABASE_URL']) && !isset($_SERVER['DATABASE_URL'])) {
         $_SERVER['DATABASE_URL'] = $_ENV['DATABASE_URL'];
     }
@@ -26,7 +25,6 @@ try {
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     ];
 
-    // Parse the URL to get connection parts
     $db = parse_url($databaseUrl);
 
     $host = $db['host'] ?? '';

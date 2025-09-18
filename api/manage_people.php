@@ -1,6 +1,15 @@
 <?php
-include __DIR__ . '/../header.php';
 require __DIR__ . '/../src/db.php';
+
+$rootHeader  = dirname(__DIR__) . '/header.php';
+$localHeader = __DIR__ . '/header.php';
+if (file_exists($rootHeader)) {
+    include $rootHeader;
+} elseif (file_exists($localHeader)) {
+    include $localHeader;
+} else {
+    trigger_error('header.php not found', E_USER_WARNING);
+}
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -62,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_ids'])) {
             $checkStmt->execute([':gid' => $grant_id, ':uid' => $uid]);
             $exists = (int)$checkStmt->fetchColumn();
             if ($exists > 0) {
-                continue; // already a member
+                continue;
             }
 
             $insertGU->execute([':gid' => $grant_id, ':uid' => $uid, ':role' => $role, ':status' => $status]);
@@ -191,4 +200,14 @@ $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 </script>
 
-<?php include __DIR__ . '/../footer.php'; ?>
+<?php
+$rootFooter  = dirname(__DIR__) . '/footer.php';
+$localFooter = __DIR__ . '/footer.php';
+if (file_exists($rootFooter)) {
+    include $rootFooter;
+} elseif (file_exists($localFooter)) {
+    include $localFooter;
+} else {
+    trigger_error('footer.php not found', E_USER_WARNING);
+}
+?>

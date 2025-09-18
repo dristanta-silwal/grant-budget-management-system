@@ -1,283 +1,214 @@
 # Grant Budget Management System (GBMS)
+The **Grant Budget Management System (GBMS)** is a PHP web app that helps researchers and grant managers create budgets, invite collaborators (PI/Co-PI/etc.), and export a clean Excel summary.
 
-The **Grant Budget Management System (GBMS)** is a web-based application designed to assist researchers, administrators, and grant managers in creating and managing grant budgets. The system streamlines the budgeting process, tracks personnel costs, and calculates direct and indirect costs efficiently.
 
-### Live Demo
-Access the live application [here](https://gbms-v2-2a5c07812841.herokuapp.com/login.php).
+## What’s in this repo
+- **PHP 8+** app (vanilla PHP)
+- **PostgreSQL** via **Supabase**
+- **Composer** dependencies (PhpSpreadsheet, Dotenv)
+- Front-end: HTML/CSS/JS
 
----
+> **Note:** This README describes the current workflow using **Supabase (Postgres)**. Previous iterations used MySQL/JawsDB/Heroku also works.
+
+
+## Quick links
+- Documentation: see the `/docs` directory in the repo
+- Screenshots are in `/docs/assets`
+
 
 ## Features
-
-- **User Authentication**: Secure login and registration system.
-- **Grant Management**:
-  - Create and manage grant budgets.
-  - Assign roles to team members (PI, Co-PI, etc.).
-- **Dynamic Budget Calculation**:
-  - Calculate yearly and total costs dynamically.
-  - Integrate fringe and indirect cost calculations.
-- **Excel Export**: Download grant budgets as well-formatted Excel sheets.
-- **Responsive Design**: Accessible on desktop and mobile devices.
-
----
-
-## Technologies Used
-
-### Programming Languages
-- **Frontend**: HTML, CSS, JavaScript
-- **Backend**: PHP (>=8.0)
-
-### Database
-- **MySQL**: Used for storing user data, grant details, and budgeting information.
-- **JawsDB**: Cloud-hosted MySQL database for Heroku deployment.
-
-### Tools and Frameworks
-- **PhpSpreadsheet**: For generating downloadable Excel files with budget details.
-- **Dotenv**: For managing environment variables in local development.
-- **Composer**: For dependency management in PHP.
-- **Heroku**: For hosting the application.
-
----
-
-## Database Schema
-
-### **Users Table**
-The **Users** table serves as the backbone of the system, storing critical user data for authentication and role management. Each user has attributes like:
-- **Unique username and email** for login and identification.
-- **Organization affiliation**, which can help manage grants across multiple institutions.
-- Integration with other tables ensures seamless role assignment (e.g., PI, Co-PI, or viewer) for various grants through the `grant_users` table.
-
-This table highlights how the system supports a multi-user environment for collaborative grant management.
-
----
-
-### **Grants Table**
-The **Grants** table captures vital information about grants, making it a central hub for managing research projects. Key details include:
-- **Funding agency information** (e.g., NSF, NIH) to identify the source of the grant.
-- **Duration and financial data** to manage long-term projects.
-- Direct relationships with users (through the `user_id`) and budget items ensure tight integration of administrative, financial, and operational data.
-
-This table showcases how the project accommodates comprehensive grant tracking.
-
----
-
-### **Budget Items Table**
-The **Budget Items** table is a granular tracker of financial allocations within grants. Highlights include:
-- Tracking **multi-year budgets** across up to six years.
-- Attributes like **description, amount, and hourly rate**, ensuring precise financial records.
-- Relationships with the **Grants** and **Budget Categories** tables enable categorization and contextualization of spending.
-
-This table emphasizes the system's ability to handle complex financial data in detail.
-
----
-
-### **Budget Categories Table**
-The **Budget Categories** table defines and enforces the structure of the budget. It provides:
-- **Predefined categories** (e.g., Personnel Compensation, Equipment, Travel) that align with funding agency requirements.
-- **Restrictions** to ensure compliance with grant rules, such as limits on equipment spending.
-
-This table simplifies grant budgeting by providing clear frameworks for categorization.
-
----
-
-### **Fringe Rates Table**
-The **Fringe Rates** table is an auxiliary but important component for calculating personnel costs. It includes:
-- **Role-specific rates** (e.g., Faculty, GRAs) to standardize cost projections.
-- Multi-year rates to align with the duration of grants.
-
-This table demonstrates the system's ability to support accurate financial forecasting.
-
----
-
-### **Grant Users Table**
-The **Grant Users** table links users to grants with specific roles (e.g., creator, PI, Co-PI, or viewer). Key attributes include:
-- **Role assignment**, which dictates user permissions.
-- **Status tracking** (e.g., pending, accepted, rejected) to manage collaboration.
-
-This table highlights the system's collaborative nature and robust access control mechanisms.
-
----
-
-### **Notifications Table**
-The **Notifications** table adds a dynamic layer of communication, allowing users to:
-- Receive updates about their grants, such as invitations or role changes.
-- Track notification statuses (e.g., read or unread) for follow-up actions.
-
-This table enhances usability by keeping users informed about project developments.
-
----
-
-### **Salaries Table**
-The **Salaries** table provides a standardized reference for personnel compensation. Key features include:
-- **Role-specific hourly rates** for budgeting personnel costs.
-- Multi-year data to handle grant durations effectively.
-
-This table supports transparent and consistent budgeting for human resources.
-
----
-
-### **Key Highlights**
-- **Centralized Grant Management**: The `Grants` table connects users, budgets, and notifications, ensuring a streamlined workflow.
-- **Comprehensive Budget Tracking**: The combination of `Budget Items` and `Budget Categories` tables ensures that every dollar is categorized and tracked accurately.
-- **Collaborative Environment**: The `Grant Users` table enables multi-role assignments, allowing diverse teams to collaborate effectively.
-- **Dynamic and Scalable**: The modular design, with auxiliary tables like `Fringe Rates` and `Salaries`, ensures the system can adapt to complex funding requirements.
+- Secure authentication (login/register)
+- Grant management (roles: creator, PI, Co‑PI, viewer)
+- Budget items by year, with salary and fringe/indirect calculations
+- Excel export (PhpSpreadsheet)
+- Notifications and collaboration workflow
 
 
-### Here's my Entity-Relationship Model for this project:
-<img src="assets/gbms_ER_model.png" alt="" width="600">
-
-More details about database can be found in [grant_budget.sql](https://github.com/dristanta-silwal/grant-budget-management-system/blob/main/grant_budget.sql).
-
-
----
-
-## Getting Started
+# Getting Started (with Supabase)
 
 ### Prerequisites
-
-- PHP (>=8.0)
+- PHP **8.1+** (CLI and extensions)
 - Composer
-- MySQL
-- Git
+- `psql` command-line client
+- A Supabase project (Postgres) – free tier is sufficient
 
-### Installation
+> **PHP extensions required:** `pdo_pgsql`, `pdo`, `openssl`, `mbstring`, `xml`, `zip`, `gd` (for PhpSpreadsheet images).
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/dristanta-silwal/grant-budget-management-system
-   cd grant-budget-management-system
+
+## 1. Clone the repo
+```bash
+git clone https://github.com/dristanta-silwal/grant-budget-management-system
+cd grant-budget-management-system
+```
+
+## 2. Install PHP dependencies
+```bash
+composer install
+```
+
+## 3. Create your `.env`
+This app reads one connection string: `DATABASE_URL`.
+
+Create a file named `.env` in the project root:
+```ini
+# .env (example)
+# Use the Session Pooler from Supabase for IPv4 compatibility
+DATABASE_URL=postgresql://postgres.<PROJECT_REF>:<PERCENT_ENCODED_PASSWORD>@<SESSION_POOLER_HOST>:6543/postgres?sslmode=require
+
+# Optional (used by some scripts/UI)
+APP_ENV=local
+```
+**Where to get these values (Supabase Dashboard → Connect):**
+- **User (Session Pooler):** `postgres.<PROJECT_REF>`
+- **Host (Session Pooler):** something like `<cloud>-<region>.pooler.supabase.com`
+- **Port:** `6543` (transaction pooler) or `5432` (session pooler). For most PHP apps, `6543` is fine.
+- **DB name:** usually `postgres`
+- **SSL:** `sslmode=require`
+
+> **Password with symbols?** URL-encode it in the URI (e.g., `@` → `%40`).
+
+
+
+## 4. Verify DB connectivity (optional but recommended)
+From the terminal, test with `psql` using the pooler host:
+```bash
+psql "postgresql://postgres.<PROJECT_REF>:<PERCENT_ENCODED_PASSWORD>@<SESSION_POOLER_HOST>:6543/postgres?sslmode=require" \
+   -c "select version(), now();"
+```
+If you prefer parameter form:
+```bash
+psql -h <SESSION_POOLER_HOST> -p 6543 -d postgres -U postgres.<PROJECT_REF> \
+   -c "select version(), now();" --set=sslmode=require
+```
+
+
+## 5. Create the database schema
+This project uses PostgreSQL. Run the Postgres schema file:
+```bash
+psql "${DATABASE_URL}" -f schema/grant_budget_postgres.sql
+```
+> If you only see a MySQL-style file (backticks, `ENGINE=InnoDB` etc.), use the Postgres version in `schema/grant_budget_postgres.sql`. The MySQL version will not work on Postgres.
+
+
+## 6. Run the app locally
+Use PHP’s built-in server and serve from `/api` (where the entry pages live):
+```bash
+php -S localhost:8000 -t api
+```
+Open: `http://localhost:8000/login.php`
+
+> If you serve from the project root, make sure includes use resilient paths (this repo does) and that your document root can reach `/api` pages.
+
+
+## 7. First login / seed data (optional)
+- Create an account via Register.
+- The first user can be elevated by setting `$_SESSION['is_admin']=true` during testing (or add an `is_admin` column and set it in the database).
+- Use the admin pages to set Salaries and Fringe Rates if your schema doesn’t include seed data.
+
+
+# Configuration reference
+
+### Environment variables
+- `DATABASE_URL` – required. Example format:
    ```
-
-2. Install dependencies:
-   ```bash
-   composer install
+   postgresql://postgres.<PROJECT_REF>:<PERCENT_ENCODED_PASSWORD>@<SESSION_POOLER_HOST>:6543/postgres?sslmode=require
    ```
+- `APP_ENV` – optional flag used by some scripts/UI.
 
-3. Configure environment variables:
-   - Create a `.env` file in the root directory with the following:
-     ```plaintext
-     DB_HOST=localhost
-     DB_USERNAME=your_username
-     DB_PASSWORD=your_password
-     DB_DATABASE=your_database
-     DB_PORT=3306
-     ```
-
-4. Set up the database:
-   - Import the provided SQL schema into your MySQL database:
-     ```bash
-     mysql -u your_username -p your_database < grant_budget.sql
-     ```
-
-5. Run the application locally:
-   ```bash
-   php -S localhost:8000
-   ```
-
-6. Access the application:
-   - Open your browser and navigate to `http://localhost:8000`.
-
----
-
-## Deployment on Heroku
-
-1. Install the Heroku CLI and log in:
-   ```bash
-   heroku login
-   ```
-
-2. Create a Heroku app and add JawsDB:
-   ```bash
-   heroku create
-   heroku addons:create jawsdb
-   ```
-
-3. Push your code to Heroku:
-   ```bash
-   git push heroku main
-   ```
-
-4. Access your application using the Heroku-provided URL.
-
----
-
-## Usage
-
-1. **Login/Register**: Start by creating an account or logging in.
-2. **Manage Grants**:
-   - Add new grants with details like title, agency, and duration.
-   - Assign personnel roles and calculate costs dynamically.
-3. **Export Data**:
-   - Download the budget as an Excel file for offline use.
-
----
-
-## Screenshots
-
-### Login Page
-<img src="assets/gbms_login.jpeg" alt="" width="600">
-
-### Register Page
-<img src="assets/gbms_register.jpeg" alt="" width="600">
-
-### Budget Management Dashboard
-<img src="assets/gbms_dashboard.jpeg" alt="" width="600">
-
-### Notifications
-<img src="assets/gbms_notification.jpeg" alt="" width="600">
-
-### Create Grant
-<img src="assets/gbms_creategrant.jpeg" alt="" width="600">
-
-### Manage People
-<img src="assets/gbms_managepeople.jpeg" alt="" width="600">
-
-### Manage Budget
-<img src="assets/gbms_managebudget.jpeg" alt="" width="600">
-
-### Generated default Excel file
-[Click Here to View](assets/gbms_excel.pdf)
+### PHP extension check
+Make sure `pdo_pgsql` is enabled:
+```bash
+php -m | grep -i pdo_pgsql
+```
+If missing, install it (method varies by OS).
 
 
----
+# Troubleshooting
+Below are real issues encountered during setup and how to resolve them.
 
-## Running the Project
+### 1. Hostname/DNS errors when using the direct Supabase host
+**Symptom:**
+```
+psql: could not translate host name "db.<...>.supabase.co" to address
+```
+**Cause:** The direct database endpoint can be IPv6-only. Some networks or clients expect IPv4.
+**Fix:** Use the Session/Transaction Pooler host from the Connect panel (e.g., `<cloud>-<region>.pooler.supabase.com`) with port `6543` and user `postgres.<PROJECT_REF>`.
 
-### Locally
-Follow the [installation steps](#installation) to set up the project on your local machine.
+### 2. “Password authentication failed for user \"postgres\"”
+**Symptom:**
+```
+FATAL: password authentication failed for user "postgres"
+```
+**Cause:** When using the pooler, the username changes to `postgres.<PROJECT_REF>`.
+**Fix:** Update your URI/DSN to use `postgres.<PROJECT_REF>` and make sure your password is percent-encoded in the URL.
 
-### On Heroku
-Access the live application at the [live demo link](https://gbms-v2-2a5c07812841.herokuapp.com/login.php).
+### 3. “duplicate SASL authentication request”
+**Symptom:**
+```
+connection failed: duplicate SASL authentication request
+```
+**Cause:** Mismatch between client and server authentication flow, often triggered by an incorrect DSN or partial SSL settings.
+**Fix:** Ensure you connect via the pooler with `sslmode=require` and a correct `DATABASE_URL`. Verify `pdo_pgsql` is installed and you aren’t mixing MySQL drivers.
 
----
+### 4. `relation "notifications" does not exist`
+**Symptom:**
+```
+SQLSTATE[42P01]: Undefined table: ... notifications
+```
+**Cause:** Tables weren’t created yet (or you ran the wrong schema file).
+**Fix:** Run the Postgres schema: `psql "${DATABASE_URL}" -f schema/grant_budget_postgres.sql`.
 
-## Contributing
+### 5. `syntax error at or near "`"`
+**Symptom:**
+```
+ERROR: syntax error at or near "`"
+```
+**Cause:** Running a MySQL schema against Postgres (backticks, `ENGINE=...`, etc.).
+**Fix:** Use the Postgres schema file. Do not run MySQL SQL on Postgres.
 
-Contributions are welcome! To contribute:
+### 6. `Undefined column: g.updated_at`
+**Symptom:**
+```
+SQLSTATE[42703]: Undefined column: ... g.updated_at
+```
+**Cause:** Code referenced a column that doesn’t exist in the table.
+**Fix (two options):**
+- Remove `updated_at` from the query and order by an existing column (e.g., `start_date` or `id DESC`).
+- Or add `created_at/updated_at` columns and a trigger to maintain `updated_at`.
 
-1. Fork the repository.
-2. Create a new branch:
-   ```bash
-   git checkout -b feature-name
-   ```
-3. Make your changes and commit them:
-   ```bash
-   git commit -m "Add feature-name"
-   ```
-4. Push to your branch:
-   ```bash
-   git push origin feature-name
-   ```
-5. Submit a pull request.
+### 7. Session warnings when including headers
+**Symptom:**
+```
+Notice: session_start(): Ignoring session_start() because a session is already active
+```
+**Cause:** Calling `session_start()` multiple times.
+**Fix:** Guard with `if (session_status() === PHP_SESSION_NONE) { session_start(); }` and include header after session/database initialization.
 
----
+### 8. Header include path errors
+**Symptom:**
+```
+include ../header.php: No such file or directory
+```
+**Cause:** Relative path from `/api` to project root.
+**Fix:** Use a resilient include: try `dirname(__DIR__).'/header.php'` then fall back to `__DIR__.'/header.php'`.
 
-## License
 
-This project is licensed under the MIT License.
+# Project structure (high level)
+```
+/                        # repo root
+├─ api/                  # PHP entry pages (login, register, grants, etc.)
+├─ src/                  # core (db connection, helpers)
+├─ assets/               # images/screenshots
+├─ schema/               # SQL files (Postgres)
+├─ vendor/               # composer dependencies (generated)
+├─ docs/                 # GitHub Pages documentation
+└─ README.md
+```
 
----
 
-## Contact
-
-For any inquiries or feedback, please contact [Dristanta Silwal](https://dristantasilwal.com.np/) at dristantasilwal003@gmail.com.
+# Contributing
+1. Fork the repo
+2. Create a feature branch: `git checkout -b feature-name`
+3. Commit: `git commit -m "feat: add X"`
+4. Push: `git push origin feature-name`
+5. Open a pull request

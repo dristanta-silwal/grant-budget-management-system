@@ -1,6 +1,15 @@
 <?php
-include __DIR__ . '/../header.php';
 require __DIR__ . '/../src/db.php';
+
+$rootHeader = dirname(__DIR__) . '/header.php';
+$localHeader = __DIR__ . '/header.php';
+if (file_exists($rootHeader)) {
+    include $rootHeader;
+} elseif (file_exists($localHeader)) {
+    include $localHeader;
+} else {
+    trigger_error('header.php not found', E_USER_WARNING);
+}
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -20,7 +29,6 @@ if (isset($_GET['update'])) {
     if ($year_value !== false) { $year_value = (float)$year_value; }
 
     if ($item_id && $year_column && $year_value !== false) {
-        // Ensure the year_column matches the expected format
         if (preg_match('/^year_\d+$/', $year_column)) {
             $stmt = $pdo->prepare("UPDATE budget_items SET $year_column = :val WHERE id = :id AND grant_id = :gid");
             $stmt->execute([':val' => $year_value, ':id' => $item_id, ':gid' => $grant_id]);
@@ -64,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         die("Invalid category.");
     }
 
-    if ($category_name === "Fringe" && isset($_POST['fringe_option'])) {
+    if ($category_name === "Fringe Benefits" && isset($_POST['fringe_option'])) {
         $description = $_POST['fringe_option'];
     } elseif ($category_name === "Personnel Compensation" && isset($_POST['personnel_option'])) {
         $description = $_POST['personnel_option'];
@@ -212,7 +220,7 @@ $items = $itemsStmt;
         personnelCompensationOptions.style.display = 'none';
         otherPersonnelOptions.style.display = 'none';
 
-        if (selectedCategoryText === 'Fringe') {
+        if (selectedCategoryText === 'Fringe Benefits') {
             fringeOptions.style.display = 'block';
         } else if (selectedCategoryText === 'Personnel Compensation') {
             personnelCompensationOptions.style.display = 'block';
@@ -227,5 +235,13 @@ $items = $itemsStmt;
 <br>
 <hr>
 <?php
-include __DIR__ . '/../footer.php';
+$rootFooter = dirname(__DIR__) . '/footer.php';
+$localFooter = __DIR__ . '/footer.php';
+if (file_exists($rootFooter)) {
+    include $rootFooter;
+} elseif (file_exists($localFooter)) {
+    include $localFooter;
+} else {
+    trigger_error('footer.php not found', E_USER_WARNING);
+}
 ?>

@@ -1,6 +1,15 @@
 <?php
-include __DIR__ . '/../header.php';
 require __DIR__ . '/../src/db.php';
+
+$rootHeader = dirname(__DIR__) . '/header.php';
+$localHeader = __DIR__ . '/header.php';
+if (file_exists($rootHeader)) {
+    include $rootHeader;
+} elseif (file_exists($localHeader)) {
+    include $localHeader;
+} else {
+    trigger_error('header.php not found', E_USER_WARNING);
+}
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -10,7 +19,6 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Basic input handling
     $title        = isset($_POST['title']) ? trim((string)$_POST['title']) : '';
     $agency       = isset($_POST['agency']) ? trim((string)$_POST['agency']) : '';
     $start_date   = isset($_POST['start_date']) ? trim((string)$_POST['start_date']) : '';
@@ -20,19 +28,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($title === '' || $agency === '' || $start_date === '' || $duration <= 0) {
         echo "<p style='color:red;'>Invalid form input.</p>";
     } else {
-        // Compute end_date
         $start = new DateTime($start_date);
         $start->modify("+{$duration} years");
         $end_date = $start->format('Y-m-d');
-
-        // Selected users/roles (optional)
         $selected_user_ids = isset($_POST['user_ids']) && is_array($_POST['user_ids']) ? $_POST['user_ids'] : [];
         $selected_roles    = isset($_POST['roles'])    && is_array($_POST['roles'])    ? $_POST['roles']    : [];
 
         try {
             $pdo->beginTransaction();
-
-            // Insert grant and RETURNING id (Postgres)
             $stmt = $pdo->prepare(
                 "INSERT INTO grants (title, agency, start_date, end_date, duration_in_years, total_amount, user_id)
                  VALUES (:title, :agency, :start_date, :end_date, :duration, :total_amount, :user_id)
@@ -48,8 +51,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':user_id'      => $user_id,
             ]);
             $grant_id = (int)$stmt->fetchColumn();
-
-            // Ensure creator is added as PI (accepted)
             $stmtGrantUser = $pdo->prepare(
                 "INSERT INTO grant_users (grant_id, user_id, role, status)
                  VALUES (:gid, :uid, :role, 'accepted')"
@@ -59,8 +60,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':uid'  => $user_id,
                 ':role' => 'PI'
             ]);
-
-            // Invite/add selected users
             for ($idx = 0; $idx < count($selected_user_ids); $idx++) {
                 $selected_user_id = (int)$selected_user_ids[$idx];
                 $role             = isset($selected_roles[$idx]) ? trim((string)$selected_roles[$idx]) : 'viewer';
@@ -90,11 +89,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 }
             }
-
-            // Insert default budget items
             $defaultHourlyRate   = 0.0;
             $defaultYears        = [1 => 0.0, 2 => 0.0, 3 => 0.0, 4 => 0.0, 5 => 0.0, 6 => 0.0];
             $defaultTotalAmount  = 0.0;
+            $categoryNames = [
+                1 => 'Personnel Compensation',
+                2 => 'Other Personnel',
+                3 => 'Fringe Benefits',
+                4 => 'Equipment',
+                5 => 'Travel',
+                6 => 'Materials and Supplies',
+                7 => 'Other Direct Costs',
+                8 => 'Contra/Back Out'
+            ];
+            $selectCat = $pdo->prepare('SELECT id FROM budget_categories WHERE category_name = :name');
+            $insertCat = $pdo->prepare('INSERT INTO budget_categories (category_name) VALUES (:name) RETURNING id');
+
+            $catIdByIndex = [];
+            foreach ($categoryNames as $idx => $name) {
+                $selectCat->execute([':name' => $name]);
+                $catId = $selectCat->fetchColumn();
+                if (!$catId) {
+                    $insertCat->execute([':name' => $name]);
+                    $catId = $insertCat->fetchColumn();
+                }
+                $catIdByIndex[$idx] = (int)$catId;
+            }
 
             $stmtBudget = $pdo->prepare(
                 "INSERT INTO budget_items
@@ -103,10 +123,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
 
             for ($i = 1; $i <= 8; $i++) {
-                if ($i === 3) { // skip category 3
+                if ($i === 3) {
                     continue;
                 }
 
+                $categoryId = $catIdByIndex[$i] ?? null;
+                if (!$categoryId) { continue; }
                 $itemCount = 1;
                 if     ($i === 1) { $itemCount = 2; }
                 elseif ($i === 2) { $itemCount = 3; }
@@ -123,14 +145,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         case 4: $defaultDescription = 'Large Servers'; break;
                         case 5: $defaultDescription = 'Domestic Travel'; break;
                         case 6: $defaultDescription = 'Materials and Supplies'; break;
-                        case 7: $defaultDescription = 'Grant of Idaho State University'; break;
+                        case 7: $defaultDescription = 'Other Direct Costs'; break;
                         case 8: $defaultDescription = 'Back Out GRA T&F'; break;
                         default: $defaultDescription = "Initial Budget Item {$i}"; break;
                     }
 
                     $stmtBudget->execute([
                         ':gid'  => $grant_id,
-                        ':cat'  => $i,
+                        ':cat'  => $categoryId,
                         ':desc' => $defaultDescription,
                         ':rate' => $defaultHourlyRate,
                         ':y1'   => $defaultYears[1],
@@ -248,5 +270,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <hr>
 <?php
-include __DIR__ . '/../footer.php';
+$rootFooter = dirname(__DIR__) . '/footer.php';
+$localFooter = __DIR__ . '/footer.php';
+if (file_exists($rootFooter)) {
+    include $rootFooter;
+} elseif (file_exists($localFooter)) {
+    include $localFooter;
+} else {
+    trigger_error('footer.php not found', E_USER_WARNING);
+}
 ?>

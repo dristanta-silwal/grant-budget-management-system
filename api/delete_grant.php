@@ -1,31 +1,50 @@
 <?php
 require __DIR__ . '/../src/db.php';
-include __DIR__ . '/../header.php';
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+function redirect_with_flash(string $url, string $type, string $message): void {
+    $_SESSION['message_type'] = $type;
+    $_SESSION['message'] = $message;
+    header('Location: ' . $url);
+    exit();
+}
 
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
-    exit();
+    redirect_with_flash('login.php', 'warning', 'Please log in to continue.');
 }
 
 $grant_id = filter_input(INPUT_GET, 'grant_id', FILTER_VALIDATE_INT);
 if (!$grant_id) {
-    die("<p style='color: red; font-weight: bold;'>Error: Grant ID is required.</p>");
+    redirect_with_flash('index.php', 'danger', 'Error: Grant ID is required.');
 }
 
 $user_id = (int)$_SESSION['user_id'];
-$stmt = $pdo->prepare("SELECT role FROM grant_users WHERE grant_id = :gid AND user_id = :uid");
+$stmt = $pdo->prepare('SELECT role FROM grant_users WHERE grant_id = :gid AND user_id = :uid');
 $stmt->execute([':gid' => $grant_id, ':uid' => $user_id]);
 $user_grant = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$user_grant || $user_grant['role'] !== 'PI') {
-    die("<p style='color: red; font-weight: bold;'>Error: You do not have permission to delete this grant.</p>");
+if (!$user_grant || !in_array($user_grant['role'], ['PI','creator'], true)) {
+    redirect_with_flash('index.php', 'danger', 'You do not have permission to delete this grant.');
 }
 
-$stmt = $pdo->prepare("SELECT title FROM grants WHERE id = :gid");
+$stmt = $pdo->prepare('SELECT title FROM grants WHERE id = :gid');
 $stmt->execute([':gid' => $grant_id]);
 $grant = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$grant) {
-    die("<p style='color: red; font-weight: bold;'>Error: Grant not found.</p>");
+    redirect_with_flash('index.php', 'danger', 'Grant not found.');
+}
+
+$rootHeader = dirname(__DIR__) . '/header.php';
+$localHeader = __DIR__ . '/header.php';
+if (file_exists($rootHeader)) {
+    include $rootHeader;
+} elseif (file_exists($localHeader)) {
+    include $localHeader;
+} else {
+    trigger_error('header.php not found', E_USER_WARNING);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_delete'])) {
@@ -42,14 +61,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_delete'])) {
         $delGrant->execute([':gid' => $grant_id]);
 
         $pdo->commit();
-
-        echo "<p style='color: green; font-weight: bold;'>Grant deleted successfully.</p>";
-        echo "<p><a href='index.php' style='color: #3498db; text-decoration: none; font-weight: bold;'>Return to Grants</a></p>";
+        redirect_with_flash('index.php', 'success', 'Grant deleted successfully.');
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        echo "<p style='color: red; font-weight: bold;'>Error deleting grant: " . htmlspecialchars($e->getMessage(), ENT_QUOTES) . "</p>";
+        redirect_with_flash('index.php', 'danger', 'Error deleting grant: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES));
     }
 
     exit();
@@ -65,4 +82,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_delete'])) {
     <a href="index.php" style="padding: 10px 20px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Cancel</a>
 </form>
 
-<?php include __DIR__ . '/../footer.php'; ?>
+<?php
+$rootFooter = dirname(__DIR__) . '/footer.php';
+$localFooter = __DIR__ . '/footer.php';
+if (file_exists($rootFooter)) {
+    include $rootFooter;
+} elseif (file_exists($localFooter)) {
+    include $localFooter;
+} else {
+    trigger_error('footer.php not found', E_USER_WARNING);
+}
+?>

@@ -1,10 +1,15 @@
 <?php
 require __DIR__ . '/../src/db.php';
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 $message = '';
 
-// Safe input readers
 $first_name = filter_input(INPUT_POST, 'first_name', FILTER_DEFAULT);
 $first_name = is_string($first_name) ? trim($first_name) : '';
 
@@ -18,19 +23,23 @@ $confirm_password = filter_input(INPUT_POST, 'confirm_password', FILTER_DEFAULT)
 $confirm_password = is_string($confirm_password) ? $confirm_password : '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['verify'])) {
+    $token = $_POST['csrf_token'] ?? '';
+    if (!hash_equals($_SESSION['csrf_token'] ?? '', $token)) {
+        $message = 'Invalid form token. Please try again.';
+    } elseif (isset($_POST['verify'])) {
         if ($first_name === '' || $email === '') {
             $message = 'Please enter a valid first name and email.';
         } else {
-            $stmt = $pdo->prepare('SELECT id FROM users WHERE first_name = :first AND email = :email');
+            $stmt = $pdo->prepare('SELECT id FROM users WHERE lower(first_name) = lower(:first) AND lower(email) = lower(:email)');
             $stmt->execute([':first' => $first_name, ':email' => $email]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($user) {
                 $_SESSION['reset_user_id'] = (int)$user['id'];
-                $message = 'User verified. You can now enter a new password.';
+                header('Location: forget_password.php');
+                exit;
             } else {
-                $message = 'No user found with that first name and email.';
+                $message = 'If the details are correct, you can now enter a new password.';
             }
         }
     }
@@ -39,15 +48,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'Please enter and confirm your new password.';
         } elseif ($new_password !== $confirm_password) {
             $message = 'Passwords do not match. Please try again.';
-        } elseif (strlen($new_password) < 8) {
-            $message = 'Password must be at least 8 characters.';
+        } elseif (strlen($new_password) < 8 || !preg_match('/[A-Za-z]/', $new_password) || !preg_match('/\d/', $new_password)) {
+            $message = 'Password must be at least 8 characters and include letters and numbers.';
         } else {
-            $hashed_password = password_hash($new_password, PASSWORD_BCRYPT);
+            $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
             $stmt = $pdo->prepare('UPDATE users SET password = :pwd WHERE id = :id');
             $stmt->execute([':pwd' => $hashed_password, ':id' => (int)$_SESSION['reset_user_id']]);
 
             unset($_SESSION['reset_user_id']);
-            $message = "Password has been updated successfully. <a href='login.php' style='color: #3498db;'>Click here to login</a>";
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            header('Location: login.php?reset=1');
+            exit;
         }
     }
 }
@@ -65,6 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <h1 style="text-align: center; font-family: Arial, sans-serif;">Forget Password</h1>
 <div style="max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
     <form action="forget_password.php" method="POST" style="display: flex; flex-direction: column; gap: 15px;">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES); ?>">
         <?php if (empty($_SESSION['reset_user_id'])): ?>
             <label for="first_name" style="font-size: 16px; color: #333;">First Name:</label>
             <input type="text" id="first_name" name="first_name" required style="padding: 8px; border: 1px solid #ccc; border-radius: 5px;">
@@ -75,23 +87,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button type="submit" name="verify" style="padding: 10px; background-color: #3498db; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer;">Verify</button>
         <?php else: ?>
             <label for="new_password" style="font-size: 16px; color: #333;">New Password:</label>
-            <input type="password" id="new_password" name="new_password" required style="padding: 8px; border: 1px solid #ccc; border-radius: 5px;" disabled>
+            <input type="password" id="new_password" name="new_password" required minlength="8" style="padding: 8px; border: 1px solid #ccc; border-radius: 5px;">
 
             <label for="confirm_password" style="font-size: 16px; color: #333;">Confirm New Password:</label>
-            <input type="password" id="confirm_password" name="confirm_password" required style="padding: 8px; border: 1px solid #ccc; border-radius: 5px;" disabled>
+            <input type="password" id="confirm_password" name="confirm_password" required minlength="8" style="padding: 8px; border: 1px solid #ccc; border-radius: 5px;">
 
-            <button type="submit" name="reset_password" style="padding: 10px; background-color: #2ecc71; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer;" disabled>Reset Password</button>
-
-            <script>
-                document.getElementById('new_password').disabled = false;
-                document.getElementById('confirm_password').disabled = false;
-                document.querySelector('button[name="reset_password"]').disabled = false;
-            </script>
+            <button type="submit" name="reset_password" style="padding: 10px; background-color: #2ecc71; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer;">Reset Password</button>
         <?php endif; ?>
     </form>
 
     <?php if (!empty($message)): ?>
-        <p style="color: red; text-align: center;"><?php echo $message; ?></p>
+        <p style="color: #d35400; text-align: center;">
+            <?php echo htmlspecialchars($message, ENT_QUOTES); ?>
+        </p>
     <?php endif; ?>
     <div style="text-align: center; margin-top: 20px;">
         <p style="color: #333; font-size: 14px;">Remembered Password?</p>

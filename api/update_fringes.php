@@ -1,30 +1,51 @@
 <?php
-include __DIR__ . '/../header.php';
 require __DIR__ . '/../src/db.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['user_id'] != 1) {
-    die("Access denied. You do not have permission to access this page.");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (empty($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit();
+}
+
+$is_admin = (!empty($_SESSION['is_admin']) && $_SESSION['is_admin'] === true)
+         || ((int)($_SESSION['user_id'] ?? 0) === 1);
+
+if (!$is_admin) {
+    http_response_code(403);
+    die('Access denied. You do not have permission to access this page.');
+}
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+function flash_redirect(string $msg, string $type = 'info', string $to = 'update_fringes.php') : void {
+    $_SESSION['message'] = $msg;
+    $_SESSION['message_type'] = $type;
+    header('Location: ' . $to);
+    exit();
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Single update (role + year + fringe_rate)
+    $token = $_POST['csrf_token'] ?? '';
+    if (!hash_equals($_SESSION['csrf_token'] ?? '', $token)) {
+        flash_redirect('Invalid form token. Please try again.', 'danger');
+    }
+
     $role        = filter_input(INPUT_POST, 'role', FILTER_DEFAULT);
     $role        = is_string($role) ? trim($role) : '';
     $year        = filter_input(INPUT_POST, 'year', FILTER_VALIDATE_INT);
     $fringe_rate = filter_input(INPUT_POST, 'fringe_rate', FILTER_VALIDATE_FLOAT);
 
-    // Bulk updates via fringe_rate[id] => value
     $bulk = $_POST['fringe_rate'] ?? null;
 
     try {
         if ($role !== '' && $year && $fringe_rate !== false && $fringe_rate !== null) {
             $stmt = $pdo->prepare('UPDATE fringe_rates SET fringe_rate = :rate WHERE role = :role AND year = :year');
             $stmt->execute([':rate' => (float)$fringe_rate, ':role' => $role, ':year' => (int)$year]);
-
-            $_SESSION['message'] = "Fringe rate updated successfully for " . htmlspecialchars($role, ENT_QUOTES) . " in year " . (int)$year . ".";
-            $_SESSION['message_type'] = 'success';
-            header('Location: update_fringes.php');
-            exit();
+            flash_redirect('Fringe rate updated successfully for ' . htmlspecialchars($role, ENT_QUOTES) . ' in year ' . (int)$year . '.', 'success');
         }
 
         if (is_array($bulk)) {
@@ -33,37 +54,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($bulk as $id => $val) {
                 $id  = (int)$id;
                 if ($id <= 0) { continue; }
-                // Accept empty string as skip; otherwise coerce to float
                 if ($val === '' || $val === null) { continue; }
                 $rate = filter_var($val, FILTER_VALIDATE_FLOAT);
                 if ($rate === false) { continue; }
                 $stmt->execute([':rate' => (float)$rate, ':id' => $id]);
             }
             $pdo->commit();
-
-            $_SESSION['message'] = 'Fringe rates updated successfully.';
-            $_SESSION['message_type'] = 'success';
-            header('Location: update_fringes.php');
-            exit();
+            flash_redirect('Fringe rates updated successfully.', 'success');
         }
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) { $pdo->rollBack(); }
-        $_SESSION['message'] = 'Error updating fringe rates: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES);
-        $_SESSION['message_type'] = 'error';
-        header('Location: update_fringes.php');
-        exit();
+        flash_redirect('Error updating fringe rates: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES), 'danger');
     }
 }
 
-$fringe_rates = $pdo->query("SELECT id, role, year, fringe_rate FROM fringe_rates ORDER BY role, year")->fetchAll(PDO::FETCH_ASSOC);
+$fringe_rates = $pdo->query('SELECT id, role, year, fringe_rate FROM fringe_rates ORDER BY role, year')->fetchAll(PDO::FETCH_ASSOC);
 
 $roles = ['PI', 'Co-PI', 'Faculty', 'GRAs/UGrads', 'Temp Help', 'UI professional staff & Post Docs'];
 $years = [1, 2, 3, 4, 5, 6];
+
+$rootHeader  = dirname(__DIR__) . '/header.php';
+$localHeader = __DIR__ . '/header.php';
+if (file_exists($rootHeader)) {
+    include $rootHeader;
+} elseif (file_exists($localHeader)) {
+    include $localHeader;
+} else {
+    trigger_error('header.php not found', E_USER_WARNING);
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <title>Update Fringe Rates</title>
@@ -72,13 +94,15 @@ $years = [1, 2, 3, 4, 5, 6];
 <h2 style="color: #333; text-align: center;">Update Fringe Rates</h2>
 
 <form method="POST" action="update_fringes.php"
-    style="max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background-color: #f9f9f9; margin-bottom: 20px;">
+    style="max-width: 420px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background-color: #f9f9f9; margin-bottom: 20px;">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES) ?>">
+
     <label for="role" style="display: block; margin-bottom: 8px; font-weight: bold;">Role:</label>
     <select name="role" id="role" required
         style="width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px;">
         <option value="">Select Role</option>
-        <?php foreach ($roles as $role): ?>
-            <option value="<?php echo htmlspecialchars($role); ?>"><?php echo htmlspecialchars($role); ?></option>
+        <?php foreach ($roles as $r): ?>
+            <option value="<?= htmlspecialchars($r, ENT_QUOTES) ?>"><?= htmlspecialchars($r) ?></option>
         <?php endforeach; ?>
     </select>
 
@@ -86,13 +110,13 @@ $years = [1, 2, 3, 4, 5, 6];
     <select name="year" id="year" required
         style="width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px;">
         <option value="">Select Year</option>
-        <?php foreach ($years as $year): ?>
-            <option value="<?php echo $year; ?>"><?php echo $year; ?></option>
+        <?php foreach ($years as $y): ?>
+            <option value="<?= (int)$y ?>"><?= (int)$y ?></option>
         <?php endforeach; ?>
     </select>
 
-    <label for="fringe_rate" style="display: block; margin-bottom: 8px; font-weight: bold;">Fringe Rate:</label>
-    <input type="number" step="0.01" name="fringe_rate" id="fringe_rate" required placeholder="Enter new fringe rate"
+    <label for="fringe_rate" style="display: block; margin-bottom: 8px; font-weight: bold;">Fringe Rate (%):</label>
+    <input type="number" step="0.01" min="0" max="100" name="fringe_rate" id="fringe_rate" required placeholder="Enter new fringe rate"
         style="width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px;">
 
     <div style="text-align: center;">
@@ -104,21 +128,23 @@ $years = [1, 2, 3, 4, 5, 6];
 
 <br>
 
-<form method="POST" action="update_fringes.php" style="max-width: 600px; margin: 0 auto;">
+<form method="POST" action="update_fringes.php" style="max-width: 700px; margin: 0 auto;">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES) ?>">
+
     <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
         <tr>
             <th style="border: 1px solid #ddd; padding: 8px; background-color: #f4f4f4;">Role</th>
             <th style="border: 1px solid #ddd; padding: 8px; background-color: #f4f4f4;">Year</th>
-            <th style="border: 1px solid #ddd; padding: 8px; background-color: #f4f4f4;">Fringe Rate</th>
+            <th style="border: 1px solid #ddd; padding: 8px; background-color: #f4f4f4;">Fringe Rate (%)</th>
         </tr>
 
         <?php foreach ($fringe_rates as $row): ?>
             <tr>
-                <td style="border: 1px solid #ddd; padding: 8px;"><?php echo htmlspecialchars($row['role']); ?></td>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: center;"><?php echo htmlspecialchars((string)$row['year']); ?></td>
+                <td style="border: 1px solid #ddd; padding: 8px;"><?= htmlspecialchars($row['role']) ?></td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: center;"><?= (int)$row['year'] ?></td>
                 <td style="border: 1px solid #ddd; padding: 8px;">
-                    <input type="number" step="0.01" name="fringe_rate[<?php echo (int)$row['id']; ?>]"
-                        value="<?php echo htmlspecialchars((string)$row['fringe_rate']); ?>"
+                    <input type="number" step="0.01" min="0" max="100" name="fringe_rate[<?= (int)$row['id'] ?>]"
+                        value="<?= htmlspecialchars((string)$row['fringe_rate']) ?>"
                         style="width: 100%; padding: 5px; box-sizing: border-box;">
                 </td>
             </tr>
@@ -134,5 +160,13 @@ $years = [1, 2, 3, 4, 5, 6];
 
 <hr>
 <?php
-include __DIR__ . '/../footer.php';
+$rootFooter  = dirname(__DIR__) . '/footer.php';
+$localFooter = __DIR__ . '/footer.php';
+if (file_exists($rootFooter)) {
+    include $rootFooter;
+} elseif (file_exists($localFooter)) {
+    include $localFooter;
+} else {
+    trigger_error('footer.php not found', E_USER_WARNING);
+}
 ?>
