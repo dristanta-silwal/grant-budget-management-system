@@ -1,6 +1,6 @@
 <?php
 session_start();
-include 'db.php';
+require __DIR__ . '/../src/db.php';
 
 $message = '';
 
@@ -10,30 +10,63 @@ if (isset($_SESSION['message'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = $_POST['username'];
-    $password = $_POST['password'];
-    $confirm_password = $_POST['confirm_password'];
-    $first_name = $_POST['first_name'];
-    $last_name = $_POST['last_name'];
-    $email = $_POST['email'];
-    $organization = $_POST['organization'];
+    // Safe input reads
+    $username     = filter_input(INPUT_POST, 'username', FILTER_DEFAULT);
+    $password     = filter_input(INPUT_POST, 'password', FILTER_DEFAULT);
+    $confirm      = filter_input(INPUT_POST, 'confirm_password', FILTER_DEFAULT);
+    $first_name   = filter_input(INPUT_POST, 'first_name', FILTER_DEFAULT);
+    $last_name    = filter_input(INPUT_POST, 'last_name', FILTER_DEFAULT);
+    $email        = filter_input(INPUT_POST, 'email', FILTER_VALIDATE_EMAIL);
+    $organization = filter_input(INPUT_POST, 'organization', FILTER_DEFAULT);
 
-    if ($password !== $confirm_password) {
+    $username     = is_string($username) ? trim($username) : '';
+    $first_name   = is_string($first_name) ? trim($first_name) : '';
+    $last_name    = is_string($last_name) ? trim($last_name) : '';
+    $organization = is_string($organization) ? trim($organization) : '';
+    $password     = is_string($password) ? $password : '';
+    $confirm      = is_string($confirm) ? $confirm : '';
+    $email        = is_string($email) ? trim($email) : '';
+
+    // Basic validations
+    if ($password !== $confirm) {
         $_SESSION['message'] = "<p style='color: red;'>Error: Passwords do not match.</p>";
+    } elseif (strlen($password) < 8 ||
+              !preg_match('/[A-Z]/', $password) ||
+              !preg_match('/[a-z]/', $password) ||
+              !preg_match('/\d/', $password) ||
+              !preg_match('/[!@#$%^&*]/', $password)) {
+        $_SESSION['message'] = "<p style='color: red;'>Error: Password does not meet the requirements.</p>";
+    } elseif ($username === '' || $first_name === '' || $last_name === '' || $email === '' || $organization === '') {
+        $_SESSION['message'] = "<p style='color: red;'>Error: All fields are required and email must be valid.</p>";
     } else {
-        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+        try {
+            // Optional: enforce unique username/email
+            $dupe = $pdo->prepare('SELECT 1 FROM users WHERE username = :u OR email = :e LIMIT 1');
+            $dupe->execute([':u' => $username, ':e' => $email]);
+            if ($dupe->fetch()) {
+                $_SESSION['message'] = "<p style='color: red;'>Error: Username or email already exists.</p>";
+                header('Location: register.php');
+                exit;
+            }
 
-        $stmt = $conn->prepare("INSERT INTO users (username, password, first_name, last_name, email, organization) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param('ssssss', $username, $hashed_password, $first_name, $last_name, $email, $organization);
+            $hashed = password_hash($password, PASSWORD_BCRYPT);
+            $stmt = $pdo->prepare('INSERT INTO users (username, password, first_name, last_name, email, organization) VALUES (:u, :p, :fn, :ln, :em, :org)');
+            $stmt->execute([
+                ':u'   => $username,
+                ':p'   => $hashed,
+                ':fn'  => $first_name,
+                ':ln'  => $last_name,
+                ':em'  => $email,
+                ':org' => $organization,
+            ]);
 
-        if ($stmt->execute()) {
             $_SESSION['message'] = "<p style='color: green;'>Registration successful. You can <a href='login.php'>login here</a>.</p>";
-        } else {
-            $_SESSION['message'] = "<p style='color: red;'>Error: " . $stmt->error . "</p>";
+        } catch (Throwable $e) {
+            $_SESSION['message'] = "<p style='color: red;'>Error: " . htmlspecialchars($e->getMessage(), ENT_QUOTES) . "</p>";
         }
     }
 
-    header("Location: register.php");
+    header('Location: register.php');
     exit;
 }
 ?>

@@ -1,6 +1,6 @@
 <?php
-include 'header.php';
-include 'db.php';
+include __DIR__ . '/../header.php';
+require __DIR__ . '/../src/db.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -12,13 +12,16 @@ if (!isset($_GET['grant_id']) || empty($_GET['grant_id'])) {
     exit();
 }
 
-$grant_id = (int) $_GET['grant_id'];
-$user_id = $_SESSION['user_id'];
+$grant_id = filter_input(INPUT_GET, 'grant_id', FILTER_VALIDATE_INT);
+if (!$grant_id) {
+    echo "<p>Error: Invalid grant ID.</p>";
+    exit();
+}
+$user_id = (int)$_SESSION['user_id'];
 
-$grantQuery = $conn->prepare("SELECT title FROM grants WHERE id = ?");
-$grantQuery->bind_param('i', $grant_id);
-$grantQuery->execute();
-$grant = $grantQuery->get_result()->fetch_assoc();
+$stmt = $pdo->prepare('SELECT title FROM grants WHERE id = :gid');
+$stmt->execute([':gid' => $grant_id]);
+$grant = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$grant) {
     echo "<p>Error: Grant not found. The grant ID provided does not exist.</p>";
@@ -27,80 +30,68 @@ if (!$grant) {
 
 $title = $grant['title'];
 
-$permissionQuery = $conn->prepare("SELECT role FROM grant_users WHERE grant_id = ? AND user_id = ? AND role IN ('PI', 'CO-PI')");
-$permissionQuery->bind_param('ii', $grant_id, $user_id);
-$permissionQuery->execute();
-$permissionResult = $permissionQuery->get_result();
-
-if ($permissionResult->num_rows === 0) {
+$stmt = $pdo->prepare("SELECT 1 FROM grant_users WHERE grant_id = :gid AND user_id = :uid AND role IN ('PI','CO-PI')");
+$stmt->execute([':gid' => $grant_id, ':uid' => $user_id]);
+if (!$stmt->fetch(PDO::FETCH_NUM)) {
     echo "<p>You don't have permission to manage this grant.</p>";
     exit();
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_ids'])) {
-    $selected_user_ids = $_POST['user_ids'];
-    $selected_roles = $_POST['roles'];
+    $selected_user_ids = isset($_POST['user_ids']) && is_array($_POST['user_ids']) ? $_POST['user_ids'] : [];
+    $selected_roles    = isset($_POST['roles'])    && is_array($_POST['roles'])    ? $_POST['roles']    : [];
 
-    $conn->begin_transaction();
+    if (count($selected_user_ids) !== count($selected_roles)) {
+        $_SESSION['error_message'] = 'Mismatched users/roles.';
+        header("Location: manage_people.php?grant_id=$grant_id");
+        exit();
+    }
 
     try {
-        $stmtGrantUser = $conn->prepare("INSERT INTO grant_users (grant_id, user_id, role, status) VALUES (?, ?, ?, ?)");
-        if (!$stmtGrantUser) {
-            throw new Exception("Error preparing statement: " . $conn->error);
-        }
+        $pdo->beginTransaction();
+
+        $checkStmt = $pdo->prepare('SELECT COUNT(*) FROM grant_users WHERE grant_id = :gid AND user_id = :uid');
+        $insertGU  = $pdo->prepare('INSERT INTO grant_users (grant_id, user_id, role, status) VALUES (:gid, :uid, :role, :status)');
+        $insertNot = $pdo->prepare('INSERT INTO notifications (user_id, message, grant_id) VALUES (:uid, :message, :gid)');
 
         foreach ($selected_user_ids as $index => $selected_user_id) {
-            $role = $selected_roles[$index];
-            $status = ($role === 'PI' || $role === 'CO-PI') ? 'pending' : 'accepted';
+            $uid  = (int)$selected_user_id;
+            $role = isset($selected_roles[$index]) ? trim((string)$selected_roles[$index]) : 'viewer';
+            $status = (in_array($role, ['PI','CO-PI'], true)) ? 'pending' : 'accepted';
 
-            $checkQuery = "SELECT COUNT(*) FROM grant_users WHERE grant_id = ? AND user_id = ?";
-            $checkStmt = $conn->prepare($checkQuery);
-            $checkStmt->bind_param('ii', $grant_id, $selected_user_id);
-            $checkStmt->execute();
-            $checkStmt->bind_result($count);
-            $checkStmt->fetch();
-            $checkStmt->close();
-
-            if ($count > 0) {
-                continue;
+            $checkStmt->execute([':gid' => $grant_id, ':uid' => $uid]);
+            $exists = (int)$checkStmt->fetchColumn();
+            if ($exists > 0) {
+                continue; // already a member
             }
 
-            $stmtGrantUser->bind_param('iiss', $grant_id, $selected_user_id, $role, $status);
-            $stmtGrantUser->execute();
+            $insertGU->execute([':gid' => $grant_id, ':uid' => $uid, ':role' => $role, ':status' => $status]);
 
             if ($status === 'pending') {
-                $message = "You have been invited to join the grant: $title as a $role.";
-                $stmtNotification = $conn->prepare("INSERT INTO notifications (user_id, message, grant_id) VALUES (?, ?, ?)");
-                if (!$stmtNotification) {
-                    throw new Exception("Error preparing notification statement: " . $conn->error);
-                }
-                $stmtNotification->bind_param('isi', $selected_user_id, $message, $grant_id);
-                $stmtNotification->execute();
+                $message = "You have been invited to join the grant: {$title} as a {$role}.";
+                $insertNot->execute([':uid' => $uid, ':message' => $message, ':gid' => $grant_id]);
             }
         }
 
-        $conn->commit();
-        $_SESSION['success_message'] = "Users added successfully!";
-    } catch (Exception $e) {
-        $conn->rollback();
-        $_SESSION['error_message'] = "Error: " . $e->getMessage();
+        $pdo->commit();
+        $_SESSION['success_message'] = 'Users added successfully!';
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        $_SESSION['error_message'] = 'Error: ' . $e->getMessage();
     }
 
     header("Location: manage_people.php?grant_id=$grant_id");
     exit();
 }
 
-
-
-$membersQuery = $conn->prepare("
-    SELECT u.id, u.username, gu.role, gu.status 
-    FROM users u 
-    JOIN grant_users gu ON u.id = gu.user_id 
-    WHERE gu.grant_id = ? AND gu.status IN ('accepted', 'pending')
-");
-$membersQuery->bind_param('i', $grant_id);
-$membersQuery->execute();
-$members = $membersQuery->get_result();
+$stmt = $pdo->prepare("
+        SELECT u.id, u.username, gu.role, gu.status
+        FROM users u
+        JOIN grant_users gu ON u.id = gu.user_id
+        WHERE gu.grant_id = :gid AND gu.status IN ('accepted','pending')
+    ");
+$stmt->execute([':gid' => $grant_id]);
+$members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <h2 style="font-family: Arial, sans-serif; color: #333; text-align: center; margin-top: 20px;">
@@ -115,7 +106,7 @@ $members = $membersQuery->get_result();
         <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Status</th>
         <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Action</th>
     </tr>
-    <?php while ($member = $members->fetch_assoc()): ?>
+    <?php foreach ($members as $member): ?>
         <tr>
             <td style="border: 1px solid #ddd; padding: 8px;"><?php echo htmlspecialchars($member['username']); ?></td>
             <td style="border: 1px solid #ddd; padding: 8px;"><?php echo htmlspecialchars($member['role']); ?></td>
@@ -132,7 +123,7 @@ $members = $membersQuery->get_result();
                     <button type="submit" name="action" value="delete" style="padding: 5px; background-color: red; color: white; border: none; cursor: pointer;">Delete</button>
                 </form>
         </tr>
-    <?php endwhile; ?>
+    <?php endforeach; ?>
 </table>
 
 <h3 style="text-align: center; font-family: Arial, sans-serif; color: #333; margin-top: 40px;">Add Users to Grant</h3>
@@ -200,4 +191,4 @@ $members = $membersQuery->get_result();
     }
 </script>
 
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../footer.php'; ?>

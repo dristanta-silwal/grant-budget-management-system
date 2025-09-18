@@ -1,44 +1,53 @@
 <?php
-include 'db.php';
+require __DIR__ . '/../src/db.php';
 session_start();
 
 $message = '';
 
+// Safe input readers
+$first_name = filter_input(INPUT_POST, 'first_name', FILTER_DEFAULT);
+$first_name = is_string($first_name) ? trim($first_name) : '';
+
+$email = filter_input(INPUT_POST, 'email', FILTER_VALIDATE_EMAIL);
+$email = is_string($email) ? trim($email) : '';
+
+$new_password = filter_input(INPUT_POST, 'new_password', FILTER_DEFAULT);
+$new_password = is_string($new_password) ? $new_password : '';
+
+$confirm_password = filter_input(INPUT_POST, 'confirm_password', FILTER_DEFAULT);
+$confirm_password = is_string($confirm_password) ? $confirm_password : '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['verify'])) {
-        $first_name = $_POST['first_name'];
-        $email = $_POST['email'];
-
-        $stmt = $conn->prepare("SELECT id FROM users WHERE first_name = ? AND email = ?");
-        $stmt->bind_param('ss', $first_name, $email);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        if ($result->num_rows > 0) {
-            $user = $result->fetch_assoc();
-            $_SESSION['reset_user_id'] = $user['id'];
-            $message = "User verified. You can now enter a new password.";
+        if ($first_name === '' || $email === '') {
+            $message = 'Please enter a valid first name and email.';
         } else {
-            $message = "No user found with that first name and email.";
+            $stmt = $pdo->prepare('SELECT id FROM users WHERE first_name = :first AND email = :email');
+            $stmt->execute([':first' => $first_name, ':email' => $email]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($user) {
+                $_SESSION['reset_user_id'] = (int)$user['id'];
+                $message = 'User verified. You can now enter a new password.';
+            } else {
+                $message = 'No user found with that first name and email.';
+            }
         }
-        $stmt->close();
     }
     elseif (isset($_POST['reset_password']) && isset($_SESSION['reset_user_id'])) {
-        $new_password = $_POST['new_password'];
-        $confirm_password = $_POST['confirm_password'];
-
-        if ($new_password === $confirm_password) {
+        if ($new_password === '' || $confirm_password === '') {
+            $message = 'Please enter and confirm your new password.';
+        } elseif ($new_password !== $confirm_password) {
+            $message = 'Passwords do not match. Please try again.';
+        } elseif (strlen($new_password) < 8) {
+            $message = 'Password must be at least 8 characters.';
+        } else {
             $hashed_password = password_hash($new_password, PASSWORD_BCRYPT);
-
-            $stmt = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
-            $stmt->bind_param('si', $hashed_password, $_SESSION['reset_user_id']);
-            $stmt->execute();
-            $stmt->close();
+            $stmt = $pdo->prepare('UPDATE users SET password = :pwd WHERE id = :id');
+            $stmt->execute([':pwd' => $hashed_password, ':id' => (int)$_SESSION['reset_user_id']]);
 
             unset($_SESSION['reset_user_id']);
             $message = "Password has been updated successfully. <a href='login.php' style='color: #3498db;'>Click here to login</a>";
-        } else {
-            $message = "Passwords do not match. Please try again.";
         }
     }
 }
@@ -85,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <p style="color: red; text-align: center;"><?php echo $message; ?></p>
     <?php endif; ?>
     <div style="text-align: center; margin-top: 20px;">
-        <p style="color: #333; font-size: 14px;">Remebered Password?</p>
+        <p style="color: #333; font-size: 14px;">Remembered Password?</p>
         <a href="login.php" style="display: inline-block; padding: 10px 20px; background-color:#2ecc71; color: white; border-radius: 5px; text-decoration: none; font-size: 16px;">Go to Login</a>
     </div>
 </div>

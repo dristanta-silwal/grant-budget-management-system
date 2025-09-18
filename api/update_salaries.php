@@ -1,36 +1,62 @@
 <?php
-include 'header.php';
-include 'db.php';
+include __DIR__ . '/../header.php';
+require __DIR__ . '/../src/db.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['user_id'] != 1) {
     die("Access denied. You do not have permission to access this page.");
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $role = $_POST['role'] ?? '';
-    $year = $_POST['year'] ?? '';
-    $hourly_rate = $_POST['hourly_rate'] ?? '';
-    $fringe_rate = $_POST['fringe_rate'] ?? '';
+    // Single update via the small form (role + year + hourly_rate)
+    $role        = filter_input(INPUT_POST, 'role', FILTER_DEFAULT);
+    $role        = is_string($role) ? trim($role) : '';
+    $year        = filter_input(INPUT_POST, 'year', FILTER_VALIDATE_INT);
+    $hourly_rate = filter_input(INPUT_POST, 'hourly_rate', FILTER_VALIDATE_FLOAT);
 
-    if ($role && $year && $hourly_rate) {
-        $stmt = $conn->prepare("UPDATE salaries SET hourly_rate = ? WHERE role = ? AND year = ?");
-        if (!$stmt) {
-            $_SESSION['message'] = "Error preparing statement: " . $conn->error;
-            $_SESSION['message_type'] = "error";
-        } else {
-            $stmt->bind_param('dsi', $hourly_rate, $role, $year);
-            $stmt->execute();
-            $stmt->close();
+    // Bulk update via the table inputs: hourly_rate[id] => value
+    $bulk = $_POST['hourly_rate'] ?? null;
 
-            $_SESSION['message'] = "Hourly rate updated successfully for $role in year $year.";
-            $_SESSION['message_type'] = "success";
+    try {
+        if ($role !== '' && $year && $hourly_rate !== false && $hourly_rate !== null) {
+            // Update by role+year
+            $stmt = $pdo->prepare('UPDATE salaries SET hourly_rate = :rate WHERE role = :role AND year = :year');
+            $stmt->execute([':rate' => (float)$hourly_rate, ':role' => $role, ':year' => (int)$year]);
+
+            $_SESSION['message'] = "Hourly rate updated successfully for " . htmlspecialchars($role, ENT_QUOTES) . " in year " . (int)$year . ".";
+            $_SESSION['message_type'] = 'success';
+            header('Location: update_salaries.php');
+            exit();
         }
-        header("Location: update_salaries.php");
+
+        if (is_array($bulk)) {
+            // Bulk update by ID
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare('UPDATE salaries SET hourly_rate = :rate WHERE id = :id');
+            foreach ($bulk as $id => $val) {
+                $id = (int)$id;
+                if ($id <= 0) { continue; }
+                if ($val === '' || $val === null) { continue; }
+                $rate = filter_var($val, FILTER_VALIDATE_FLOAT);
+                if ($rate === false) { continue; }
+                $stmt->execute([':rate' => (float)$rate, ':id' => $id]);
+            }
+            $pdo->commit();
+
+            $_SESSION['message'] = 'Hourly rates updated successfully.';
+            $_SESSION['message_type'] = 'success';
+            header('Location: update_salaries.php');
+            exit();
+        }
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        $_SESSION['message'] = 'Error updating hourly rates: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES);
+        $_SESSION['message_type'] = 'error';
+        header('Location: update_salaries.php');
         exit();
     }
 }
 
-$salaries = $conn->query("SELECT id, role, year, hourly_rate FROM salaries ORDER BY role, year");
+$salaries = $pdo->query("SELECT id, role, year, hourly_rate FROM salaries ORDER BY role, year")->fetchAll(PDO::FETCH_ASSOC);
 
 $roles = ['PI', 'Co-PI', 'Faculty', 'GRAs/UGrads', 'Temp Help', 'UI professional staff & Post Docs'];
 $years = [1, 2, 3, 4, 5, 6];
@@ -79,18 +105,17 @@ $years = [1, 2, 3, 4, 5, 6];
             <th style="border: 1px solid #ddd; padding: 8px; background-color: #f4f4f4;">Hourly Rate</th>
         </tr>
 
-        <?php while ($row = $salaries->fetch_assoc()): ?>
+        <?php foreach ($salaries as $row): ?>
             <tr>
                 <td style="border: 1px solid #ddd; padding: 8px;"><?php echo htmlspecialchars($row['role']); ?></td>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">
-                    <?php echo htmlspecialchars($row['year']); ?></td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: center;"><?php echo htmlspecialchars((string)$row['year']); ?></td>
                 <td style="border: 1px solid #ddd; padding: 8px;">
-                    <input type="number" step="0.01" name="hourly_rate[<?php echo $row['id']; ?>]"
-                        value="<?php echo htmlspecialchars($row['hourly_rate']); ?>"
+                    <input type="number" step="0.01" name="hourly_rate[<?php echo (int)$row['id']; ?>]"
+                        value="<?php echo htmlspecialchars((string)$row['hourly_rate']); ?>"
                         style="width: 100%; padding: 5px; box-sizing: border-box;">
                 </td>
             </tr>
-        <?php endwhile; ?>
+        <?php endforeach; ?>
     </table>
 
     <div style="text-align: center; margin-top: 20px;">
@@ -103,5 +128,5 @@ $years = [1, 2, 3, 4, 5, 6];
 
 <hr>
 <?php
-include 'footer.php';
+include __DIR__ . '/../footer.php';
 ?>

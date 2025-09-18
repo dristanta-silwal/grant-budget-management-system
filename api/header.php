@@ -1,5 +1,5 @@
 <?php
-include 'db.php';
+require __DIR__ . '/../src/db.php';
 session_start();
 
 $user_id = $_SESSION['user_id'] ?? null;
@@ -8,31 +8,13 @@ $unread_count = 0;
 $user_name = '';
 
 if ($user_id) {
-    if ($conn) {
-        $stmt = $conn->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND `read` = FALSE");
-        if ($stmt) {
-            $stmt->bind_param('i', $user_id);
-            $stmt->execute();
-            $stmt->bind_result($unread_count);
-            $stmt->fetch();
-            $stmt->close();
-        } else {
-            die("Error preparing statement for notifications count: " . $conn->error);
-        }
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = :uid AND \"read\" = FALSE");
+    $stmt->execute([':uid' => $user_id]);
+    $unread_count = (int)$stmt->fetchColumn();
 
-        $stmt = $conn->prepare("SELECT first_name FROM users WHERE id = ?");
-        if ($stmt) {
-            $stmt->bind_param('i', $user_id);
-            $stmt->execute();
-            $stmt->bind_result($user_name);
-            $stmt->fetch();
-            $stmt->close();
-        } else {
-            die("Error preparing statement for user name: " . $conn->error);
-        }
-    } else {
-        die("Database connection error.");
-    }
+    $stmt = $pdo->prepare("SELECT first_name FROM users WHERE id = :id");
+    $stmt->execute([':id' => $user_id]);
+    $user_name = (string)$stmt->fetchColumn();
 }
 ?>
 

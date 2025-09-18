@@ -1,59 +1,55 @@
 <?php
-include 'db.php';
-include 'header.php';
+require __DIR__ . '/../src/db.php';
+include __DIR__ . '/../header.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
     exit();
 }
 
-$grant_id = $_GET['grant_id'] ?? null;
+$grant_id = filter_input(INPUT_GET, 'grant_id', FILTER_VALIDATE_INT);
 if (!$grant_id) {
     die("<p style='color: red; font-weight: bold;'>Error: Grant ID is required.</p>");
 }
 
-$user_id = $_SESSION['user_id'];
-$query = "
-    SELECT role 
-    FROM grant_users 
-    WHERE grant_id = ? AND user_id = ?
-";
-$stmt = $conn->prepare($query);
-$stmt->bind_param('ii', $grant_id, $user_id);
-$stmt->execute();
-$user_grant = $stmt->get_result()->fetch_assoc();
+$user_id = (int)$_SESSION['user_id'];
+$stmt = $pdo->prepare("SELECT role FROM grant_users WHERE grant_id = :gid AND user_id = :uid");
+$stmt->execute([':gid' => $grant_id, ':uid' => $user_id]);
+$user_grant = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$user_grant || $user_grant['role'] !== 'PI') {
     die("<p style='color: red; font-weight: bold;'>Error: You do not have permission to delete this grant.</p>");
 }
 
-$grant = $conn->query("SELECT title FROM grants WHERE id = $grant_id")->fetch_assoc();
+$stmt = $pdo->prepare("SELECT title FROM grants WHERE id = :gid");
+$stmt->execute([':gid' => $grant_id]);
+$grant = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$grant) {
     die("<p style='color: red; font-weight: bold;'>Error: Grant not found.</p>");
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_delete'])) {
-    $conn->begin_transaction();
-
     try {
-        $delete_items = $conn->prepare("DELETE FROM budget_items WHERE grant_id = ?");
-        $delete_items->bind_param("i", $grant_id);
-        $delete_items->execute();
+        $pdo->beginTransaction();
 
-        $delete_users = $conn->prepare("DELETE FROM grant_users WHERE grant_id = ?");
-        $delete_users->bind_param("i", $grant_id);
-        $delete_users->execute();
-        $delete_grant = $conn->prepare("DELETE FROM grants WHERE id = ?");
-        $delete_grant->bind_param("i", $grant_id);
-        $delete_grant->execute();
+        $delItems = $pdo->prepare("DELETE FROM budget_items WHERE grant_id = :gid");
+        $delItems->execute([':gid' => $grant_id]);
 
-        $conn->commit();
+        $delUsers = $pdo->prepare("DELETE FROM grant_users WHERE grant_id = :gid");
+        $delUsers->execute([':gid' => $grant_id]);
+
+        $delGrant = $pdo->prepare("DELETE FROM grants WHERE id = :gid");
+        $delGrant->execute([':gid' => $grant_id]);
+
+        $pdo->commit();
 
         echo "<p style='color: green; font-weight: bold;'>Grant deleted successfully.</p>";
         echo "<p><a href='index.php' style='color: #3498db; text-decoration: none; font-weight: bold;'>Return to Grants</a></p>";
-    } catch (Exception $e) {
-        $conn->rollback();
-        echo "<p style='color: red; font-weight: bold;'>Error deleting grant: " . $e->getMessage() . "</p>";
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        echo "<p style='color: red; font-weight: bold;'>Error deleting grant: " . htmlspecialchars($e->getMessage(), ENT_QUOTES) . "</p>";
     }
 
     exit();
@@ -69,4 +65,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_delete'])) {
     <a href="index.php" style="padding: 10px 20px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Cancel</a>
 </form>
 
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../footer.php'; ?>

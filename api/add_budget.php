@@ -1,6 +1,6 @@
 <?php
-include 'header.php';
-include 'db.php';
+include __DIR__ . '/../header.php';
+require __DIR__ . '/../src/db.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -14,16 +14,16 @@ if (!$grant_id) {
 
 if (isset($_GET['update'])) {
     $item_id = filter_input(INPUT_GET, 'update', FILTER_VALIDATE_INT);
-    $year_column = filter_input(INPUT_POST, 'year_column', FILTER_SANITIZE_STRING);
+    $year_column = filter_input(INPUT_POST, 'year_column', FILTER_DEFAULT);
+    $year_column = is_string($year_column) ? trim($year_column) : null;
     $year_value = filter_input(INPUT_POST, 'year_value', FILTER_VALIDATE_FLOAT);
+    if ($year_value !== false) { $year_value = (float)$year_value; }
 
     if ($item_id && $year_column && $year_value !== false) {
         // Ensure the year_column matches the expected format
         if (preg_match('/^year_\d+$/', $year_column)) {
-            $stmt = $conn->prepare("UPDATE budget_items SET $year_column = ? WHERE id = ? AND grant_id = ?");
-            $stmt->bind_param("dii", $year_value, $item_id, $grant_id);
-            $stmt->execute();
-            $stmt->close();
+            $stmt = $pdo->prepare("UPDATE budget_items SET $year_column = :val WHERE id = :id AND grant_id = :gid");
+            $stmt->execute([':val' => $year_value, ':id' => $item_id, ':gid' => $grant_id]);
             header("Location: add_budget.php?grant_id=$grant_id&updated=1");
             exit();
         }
@@ -34,20 +34,16 @@ if (isset($_GET['update'])) {
 if (isset($_GET['delete'])) {
     $item_id = filter_input(INPUT_GET, 'delete', FILTER_VALIDATE_INT);
     if ($item_id) {
-        $stmt = $conn->prepare("DELETE FROM budget_items WHERE id = ? AND grant_id = ?");
-        $stmt->bind_param("ii", $item_id, $grant_id);
-        $stmt->execute();
-        $stmt->close();
+        $stmt = $pdo->prepare("DELETE FROM budget_items WHERE id = :id AND grant_id = :gid");
+        $stmt->execute([':id' => $item_id, ':gid' => $grant_id]);
         header("Location: add_budget.php?grant_id=$grant_id");
         exit();
     }
 }
 
-$stmt = $conn->prepare("SELECT * FROM grants WHERE id = ?");
-$stmt->bind_param("i", $grant_id);
-$stmt->execute();
-$grant = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+$stmt = $pdo->prepare("SELECT * FROM grants WHERE id = :id");
+$stmt->execute([':id' => $grant_id]);
+$grant = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$grant) {
     die("Grant not found.");
@@ -60,12 +56,9 @@ $total_budget = $grant['total_amount'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $category_id = filter_input(INPUT_POST, 'category_id', FILTER_VALIDATE_INT);
 
-    $stmt = $conn->prepare("SELECT category_name FROM budget_categories WHERE id = ?");
-    $stmt->bind_param("i", $category_id);
-    $stmt->execute();
-    $stmt->bind_result($category_name);
-    $stmt->fetch();
-    $stmt->close();
+    $stmt = $pdo->prepare("SELECT category_name FROM budget_categories WHERE id = :id");
+    $stmt->execute([':id' => $category_id]);
+    $category_name = $stmt->fetchColumn();
 
     if (!$category_name) {
         die("Invalid category.");
@@ -87,32 +80,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     for ($year = 1; $year <= $years; $year++) {
         $yearly_amounts["year_$year"] = isset($_POST["year$year"]) ? floatval($_POST["year$year"]) : 0;
     }
+    for ($y = 1; $y <= 6; $y++) {
+        if (!isset($yearly_amounts["year_$y"])) { $yearly_amounts["year_$y"] = 0.0; }
+    }
     $total_amount = array_sum($yearly_amounts);
 
-    $stmt = $conn->prepare("
-        INSERT INTO budget_items (grant_id, category_id, description, hourly_rate, year_1, year_2, year_3, year_4, year_5, year_6, amount) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ");
-    $stmt->bind_param(
-        "iissddddddd", 
-        $grant_id, $category_id, $description, $hourly_rate, 
-        $yearly_amounts['year_1'], $yearly_amounts['year_2'], 
-        $yearly_amounts['year_3'], $yearly_amounts['year_4'], 
-        $yearly_amounts['year_5'], $yearly_amounts['year_6'], 
-        $total_amount
-    );
+    $hourly_rate = isset($_POST['hourly_rate']) ? (float)$_POST['hourly_rate'] : 0.0;
 
-    if ($stmt->execute()) {
+    $sql = "INSERT INTO budget_items
+            (grant_id, category_id, description, hourly_rate, year_1, year_2, year_3, year_4, year_5, year_6, amount)
+            VALUES (:grant_id, :category_id, :description, :hourly_rate, :y1, :y2, :y3, :y4, :y5, :y6, :amount)";
+    $stmt = $pdo->prepare($sql);
+    $ok = $stmt->execute([
+        ':grant_id' => $grant_id,
+        ':category_id' => $category_id,
+        ':description' => $description,
+        ':hourly_rate' => $hourly_rate,
+        ':y1' => $yearly_amounts['year_1'],
+        ':y2' => $yearly_amounts['year_2'],
+        ':y3' => $yearly_amounts['year_3'],
+        ':y4' => $yearly_amounts['year_4'],
+        ':y5' => $yearly_amounts['year_5'],
+        ':y6' => $yearly_amounts['year_6'],
+        ':amount' => $total_amount
+    ]);
+    if ($ok) {
         header("Location: add_budget.php?grant_id=$grant_id");
         exit();
     } else {
-        echo "Error: " . $stmt->error;
+        $errInfo = $stmt->errorInfo();
+        echo "Error: " . ($errInfo[2] ?? 'unknown');
     }
-    $stmt->close();
 }
 
-$categories = $conn->query("SELECT * FROM budget_categories");
-$items = $conn->query("SELECT * FROM budget_items WHERE grant_id = $grant_id");
+$categories = $pdo->query("SELECT * FROM budget_categories");
+$itemsStmt = $pdo->prepare("SELECT * FROM budget_items WHERE grant_id = :gid");
+$itemsStmt->execute([':gid' => $grant_id]);
+$items = $itemsStmt;
 ?>
 
 <h1 style="font-family: Arial, sans-serif; text-align: center; color: #333; font-size: 1.8em; margin-top: 20px;">Add Budget for <?php echo htmlspecialchars($title); ?></h1>
@@ -122,7 +126,7 @@ $items = $conn->query("SELECT * FROM budget_items WHERE grant_id = $grant_id");
     <label style="display: block; margin-bottom: 5px; font-weight: bold;">Category:</label>
     <select name="category_id" id="category-select" required onchange="handleCategoryChange()" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px;">
         <option value="">Select Category</option>
-        <?php while($cat = $categories->fetch_assoc()): ?>
+        <?php while($cat = $categories->fetch(PDO::FETCH_ASSOC)): ?>
             <option value="<?php echo $cat['id']; ?>"><?php echo htmlspecialchars($cat['category_name']); ?></option>
         <?php endwhile; ?>
     </select>
@@ -176,14 +180,14 @@ $items = $conn->query("SELECT * FROM budget_items WHERE grant_id = $grant_id");
         <?php endfor; ?>
         <th style="border: 1px solid #ddd; padding: 12px; font-weight: bold;">Action</th>
     </tr>
-    <?php while ($item = $items->fetch_assoc()): ?>
+    <?php while ($item = $items->fetch(PDO::FETCH_ASSOC)): ?>
     <tr>
         <td style="border: 1px solid #ddd; padding: 12px;"><?php echo htmlspecialchars($item['description']); ?></td>
         <?php for ($year = 1; $year <= $years; $year++): ?>
             <td style="border: 1px solid #ddd; padding: 12px;">
                 <form action="add_budget.php?grant_id=<?php echo $grant_id; ?>&update=<?php echo $item['id']; ?>" method="POST" style="margin: 0; display: flex;">
                     <input type="hidden" name="year_column" value="year_<?php echo $year; ?>">
-                    <input type="number" step="0.01" name="year_value" value="<?php echo number_format($item["year_$year"], 2); ?>" style="width: 60px; padding: 5px;">
+                    <input type="number" step="0.01" name="year_value" value="<?php echo htmlspecialchars(number_format((float)$item["year_$year"], 2, '.', ''), ENT_QUOTES); ?>" style="width: 60px; padding: 5px;">
                     <button type="submit" style="background-color: #4CAF50; color: white; border: none; padding: 5px 10px; cursor: pointer;">Update</button>
                 </form>
             </td>
@@ -223,5 +227,5 @@ $items = $conn->query("SELECT * FROM budget_items WHERE grant_id = $grant_id");
 <br>
 <hr>
 <?php
-include 'footer.php';
+include __DIR__ . '/../footer.php';
 ?>

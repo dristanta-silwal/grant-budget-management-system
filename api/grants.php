@@ -1,5 +1,6 @@
 <?php
-include 'header.php';
+include __DIR__ . '/../header.php';
+require __DIR__ . '/../src/db.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -8,25 +9,23 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 
-$query = "
-    SELECT g.*, gu.role 
-    FROM grants g
-    JOIN grant_users gu ON g.id = gu.grant_id
-    WHERE gu.user_id = ?
-";
-$stmt = $conn->prepare($query);
-$stmt->bind_param('i', $user_id);
-$stmt->execute();
-$grants = $stmt->get_result();
-
-if (!$grants) {
-    die("Error fetching grants: " . $conn->error);
+try {
+    $stmt = $pdo->prepare(
+        "SELECT g.*, gu.role
+         FROM grants g
+         JOIN grant_users gu ON g.id = gu.grant_id
+         WHERE gu.user_id = :uid"
+    );
+    $stmt->execute([':uid' => (int)$user_id]);
+    $grants = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    die("Error fetching grants: " . htmlspecialchars($e->getMessage(), ENT_QUOTES));
 }
 ?>
 
 <h2>Your Grants</h2>
 <ul>
-    <?php while ($row = $grants->fetch_assoc()): ?>
+    <?php foreach ($grants as $row): ?>
         <li style="background-color: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 10px; 
     display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);">
 
@@ -52,9 +51,9 @@ if (!$grants) {
                 <?php endif; ?>
             </div>
         </li>
-    <?php endwhile; ?>
+    <?php endforeach; ?>
 </ul>
 
 <?php
-include 'footer.php';
+include __DIR__ . '/../footer.php';
 ?>

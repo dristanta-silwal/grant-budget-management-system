@@ -491,3 +491,122 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+-- PostgreSQL schema for Grant Budget Management (translated from MySQL)
+-- Run this in Supabase SQL Editor or psql against your Supabase database.
+-- Notes:
+-- - MySQL ENGINE/COLLATE directives removed
+-- - AUTO_INCREMENT -> bigserial/serial
+-- - ENUM -> text with CHECK constraints
+-- - TINYINT(1) -> boolean
+-- - Backtick identifiers -> standard identifiers; reserved word read -> "read"
+-- - Invalid MySQL date '0000-00-00' is not allowed in Postgres; end_date is NULLable
+
+BEGIN;
+
+-- USERS
+CREATE TABLE IF NOT EXISTS public.users (
+  id           bigserial PRIMARY KEY,
+  first_name   text,
+  username     text NOT NULL UNIQUE,
+  password     text NOT NULL,
+  last_name    text NOT NULL,
+  email        text NOT NULL UNIQUE,
+  organization text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+-- GRANTS
+CREATE TABLE IF NOT EXISTS public.grants (
+  id                 bigserial PRIMARY KEY,
+  user_id            bigint REFERENCES public.users(id) ON DELETE SET NULL,
+  title              text NOT NULL,
+  agency             text NOT NULL,
+  duration_in_years  integer NOT NULL,
+  total_amount       numeric(12,2) NOT NULL DEFAULT 0,
+  start_date         date NOT NULL,
+  end_date           date NULL
+);
+CREATE INDEX IF NOT EXISTS idx_grants_user_id ON public.grants(user_id);
+
+-- BUDGET CATEGORIES
+CREATE TABLE IF NOT EXISTS public.budget_categories (
+  id             bigserial PRIMARY KEY,
+  category_name  text NOT NULL UNIQUE,
+  max_amount     numeric(10,2),
+  restrictions   text
+);
+
+-- BUDGET ITEMS
+CREATE TABLE IF NOT EXISTS public.budget_items (
+  id           bigserial PRIMARY KEY,
+  grant_id     bigint REFERENCES public.grants(id) ON DELETE CASCADE,
+  category_id  bigint REFERENCES public.budget_categories(id) ON DELETE RESTRICT,
+  description  text NOT NULL,
+  amount       numeric(12,2) NOT NULL DEFAULT 0,
+  year_1       numeric(12,2) NOT NULL DEFAULT 0,
+  year_2       numeric(12,2) NOT NULL DEFAULT 0,
+  year_3       numeric(12,2) NOT NULL DEFAULT 0,
+  year_4       numeric(12,2) NOT NULL DEFAULT 0,
+  year_5       numeric(12,2) NOT NULL DEFAULT 0,
+  year_6       numeric(12,2) NOT NULL DEFAULT 0,
+  hourly_rate  numeric(12,2)
+);
+CREATE INDEX IF NOT EXISTS idx_budget_items_grant_id ON public.budget_items(grant_id);
+CREATE INDEX IF NOT EXISTS idx_budget_items_category_id ON public.budget_items(category_id);
+
+-- SALARIES (role/year lookup)
+CREATE TABLE IF NOT EXISTS public.salaries (
+  id           bigserial PRIMARY KEY,
+  role         text NOT NULL,
+  year         integer NOT NULL CHECK (year BETWEEN 1 AND 6),
+  hourly_rate  numeric(12,2) NOT NULL,
+  UNIQUE (role, year)
+);
+
+-- FRINGE RATES (role/year lookup)
+CREATE TABLE IF NOT EXISTS public.fringe_rates (
+  id           bigserial PRIMARY KEY,
+  role         text NOT NULL,
+  year         integer NOT NULL CHECK (year BETWEEN 1 AND 6),
+  fringe_rate  numeric(6,2) NOT NULL,
+  UNIQUE (role, year)
+);
+
+-- GRANT USERS
+CREATE TABLE IF NOT EXISTS public.grant_users (
+  id        bigserial PRIMARY KEY,
+  grant_id  bigint NOT NULL REFERENCES public.grants(id) ON DELETE CASCADE,
+  user_id   bigint NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  role      text NOT NULL CHECK (role IN ('creator','PI','CO-PI','viewer')),
+  added_at  timestamptz NOT NULL DEFAULT now(),
+  status    text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected'))
+);
+CREATE INDEX IF NOT EXISTS idx_grant_users_grant_id ON public.grant_users(grant_id);
+CREATE INDEX IF NOT EXISTS idx_grant_users_user_id  ON public.grant_users(user_id);
+
+-- NOTIFICATIONS
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id         bigserial PRIMARY KEY,
+  user_id    bigint NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  message    text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  "read"     boolean NOT NULL DEFAULT false,
+  grant_id   bigint REFERENCES public.grants(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
+  ON public.notifications (user_id)
+  WHERE NOT "read";
+
+-- Seed default categories (id values will be auto-generated)
+INSERT INTO public.budget_categories (category_name, max_amount, restrictions) VALUES
+ ('Personnel Compensation', 30.00, 'Restrictions for Personnel Compensation'),
+ ('Other Personnel', 20.00, 'Restrictions for Other Personnel '),
+ ('Equipment', 10.00, 'Equipment in this field should be >$5000'),
+ ('Travel', 10.00, 'Restrictions for travel'),
+ ('Other Direct Costs', 10.00, 'Restrictions for Other Direct Costs'),
+ ('Subawards', 10.00, 'Restrictions for Subawards'),
+ ('Total Direct Costs', 10.00, 'Restrictions for Total Direct Costs')
+ON CONFLICT (category_name) DO NOTHING;
+
+COMMIT;
